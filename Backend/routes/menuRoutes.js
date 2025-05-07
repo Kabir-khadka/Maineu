@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const MenuItem = require('../models/MenuItem');
+const upload = require('../middlewares/upload'); // Assuming you have a middleware for handling file uploads
 
 //Predefined categories list
 const predefinedCategories = [
@@ -16,9 +17,11 @@ const predefinedCategories = [
 ];
 
 //Create a new Item
-router.post('/', async (req, res) => {
+router.post('/', upload.single('image'), async (req, res) => {
     try {
-        const newItem = new MenuItem(req.body);
+        const { name, price, category, available } =req.body;
+        const image = req.file ? `/uploads/${req.file.filename}` : null; 
+        const newItem = new MenuItem({ name, price, category, available, image });
         await newItem.save();
         res.status(201).json(newItem);
     } catch (error) {
@@ -50,14 +53,35 @@ router.get('/categories', async (req, res) => {
 });
 
 //Get all predefined categories
-router.get('/categories/all', (req, res) => {
-    res.json(predefinedCategories);
-});
+router.get('/categories/all', async (req, res) => {
+    try {
+      const dbCategories = await MenuItem.distinct('category'); // dynamic categories from DB
+      const allCategories = Array.from(new Set([...predefinedCategories, ...dbCategories])); // merge + remove duplicates
+      res.json(allCategories); // return the merged list
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to fetch all categories' });
+    }
+  });
+  
 
 // Update a Menu Item
-router.put('/:id', async (req, res) => {
+router.put('/:id', upload.single('image'), async (req, res) => {
     try {
-        const updatedItem = await MenuItem.findByIdAndUpdate(req.params.id, req.body, { new: true });
+        const { name, price, category, available } = req.body;
+
+        const updatedFields ={
+            name,
+            price,
+            category,
+            available,
+        };
+
+        if (req.file) {
+            updatedFields.image = `/uploads/${req.file.filename}`;
+        }
+
+
+        const updatedItem = await MenuItem.findByIdAndUpdate(req.params.id, updatedFields, { new: true });
         res.status(200).json(updatedItem);
     } catch (error) {
         res.status(400).json({ error: error.message });
