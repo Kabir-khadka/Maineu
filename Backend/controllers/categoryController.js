@@ -3,7 +3,7 @@ const Category = require('../models/Category');
 // GET all categories
 const getAllCategories = async (req, res) => {
   try {
-    const categories = await Category.find().sort({ name: 1 }); // alphabetic
+    const categories = await Category.find().sort({ position: 1 }); // Sort by creation date
     res.json(categories);
   } catch (err) {
     res.status(500).json({ message: 'Server Error', error: err.message });

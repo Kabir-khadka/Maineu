@@ -3,10 +3,12 @@
 import React, { useEffect, useState } from 'react';
 import styles from './category.module.css';
 import axios from 'axios';
+import SortableCategoryList from '@/components/category/SortableCategoryList';
 
 interface Category {
-  _id?: string;
+  _id: string;
   name: string;
+  position?: number;
 }
 
 export default function CategoryManagementPage() {
@@ -14,6 +16,7 @@ export default function CategoryManagementPage() {
   const [newCategory, setNewCategory] = useState('');
   const [editId, setEditId] = useState<string | null>(null);
   const [editName, setEditName] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
 
   const predefinedCategories = [
     'Food', 'Momos', 'Noodles', 'Pizza', 'Drinks',
@@ -21,17 +24,14 @@ export default function CategoryManagementPage() {
   ];
 
   const fetchCategories = async () => {
+    setIsLoading(true);
     try {
       const dbRes = await axios.get<Category[]>('http://localhost:5000/api/categories');
-  
-      // Filter and sort by predefined order
-      const filteredAndSorted = predefinedCategories
-        .map(name => dbRes.data.find(cat => cat.name === name))
-        .filter(Boolean) as Category[];
-  
       setCategories(dbRes.data);
     } catch (err) {
       console.error('Error fetching categories:', err);
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -51,15 +51,14 @@ export default function CategoryManagementPage() {
     setEditName(name);
   };
 
+  const handleCancelEdit = () => {
+  setEditId(null);
+  setEditName('');
+};
+
   const handleUpdate = async () => {
     if (!editName.trim() || !editId) return;
-  
-    // Prevent invalid renames
-    if (!predefinedCategories.includes(editName.trim())) {
-      alert('Category name must be one of the predefined categories.');
-      return;
-    }
-  
+    
     try {
       await axios.put(`http://localhost:5000/api/categories/${editId}`, { name: editName.trim() });
       setEditId(null);
@@ -69,18 +68,35 @@ export default function CategoryManagementPage() {
       alert('Failed to update category: ' + (err as any).response?.data?.message);
     }
   };
-  
 
   const handleDelete = async (id: string | null, name: string) => {
     if (!id) return;
 
-    if (!window.confirm('Are you sure you want to delete this category?')) return;
+    if (!window.confirm(`Are you sure you want to delete "${name}"?`)) return;
 
     try {
       await axios.delete(`http://localhost:5000/api/categories/${id}`);
       fetchCategories();
     } catch (err) {
       alert('Failed to delete category: ' + (err as any).response?.data?.message);
+    }
+  };
+
+  const handleReorder = async (updatedList: Category[]) => {
+    try {
+      await axios.put('http://localhost:5000/api/categories/reorder', {
+        categories: updatedList
+      });
+      setCategories(updatedList);
+    } catch (err) {
+      console.error('Failed to reorder categories:', err);
+      alert('Failed to reorder categories');
+    }
+  };
+
+  const handleKeyPress = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      handleAdd();
     }
   };
 
@@ -98,45 +114,35 @@ export default function CategoryManagementPage() {
           placeholder="Enter new category name"
           value={newCategory}
           onChange={(e) => setNewCategory(e.target.value)}
+          onKeyPress={handleKeyPress}
           className={styles.input}
         />
-        <button onClick={handleAdd} className={styles.addButton}>
+        <button 
+          onClick={handleAdd} 
+          className={styles.addButton}
+          disabled={!newCategory.trim()}
+        >
           ➕ Add Category
         </button>
       </div>
 
-      <ul className={styles.categoryList}>
-        {categories.map((cat) => (
-          <li key={cat._id} className={styles.categoryItem}>
-            {editId === cat._id ? (
-              <>
-                <input
-                  type="text"
-                  value={editName}
-                  onChange={(e) => setEditName(e.target.value)}
-                  className={styles.input}
-                />
-                <button onClick={handleUpdate} className={styles.saveButton}>
-                  💾 Save
-                </button>
-                <button onClick={() => setEditId(null)} className={styles.cancelButton}>
-                  ❌ Cancel
-                </button>
-              </>
-            ) : (
-              <>
-                <span className={styles.categoryName}>{cat.name}</span>
-                <button onClick={() => handleEdit(cat._id || null, cat.name)} className={styles.editButton}>
-                  ✏️ Edit
-                </button>
-                <button onClick={() => handleDelete(cat._id || null, cat.name)} className={styles.deleteButton}>
-                  🗑️ Delete
-                </button>
-              </>
-            )}
-          </li>
-        ))}
-      </ul>
+      {isLoading ? (
+        <p>Loading categories...</p>
+      ) : categories.length === 0 ? (
+        <p>No categories found. Add one to get started.</p>
+      ) : (
+        <SortableCategoryList
+          categories={categories}
+          onReorder={handleReorder}
+          onEdit={handleEdit}
+          onDelete={handleDelete}
+          editId={editId}
+          editName={editName}
+          setEditName={setEditName}
+          onUpdate={handleUpdate}
+          onCancelEdit={handleCancelEdit}
+        />
+      )}
     </div>
   );
 }
