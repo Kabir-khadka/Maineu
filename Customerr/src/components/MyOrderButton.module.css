@@ -1,0 +1,76 @@
+.buttonContainer {
+    position: absolute; /* Keep it positioned absolutely */
+    right: 20px; /* Keep it aligned to the right */
+    top: 80px; /* Increased value to move it lower */
+    display: inline-block;
+}
+
+/* Notification Dot - Adjusted for New Position */
+.notificationDot {
+    position: absolute;
+    top: -10px; /* Keep dot aligned above */
+    left: 50%;
+    transform: translateX(-50%);
+    width: 12px;
+    height: 12px;
+    background-color: orange;
+    border-radius: 50%;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+    margin-top: -51px; /* Keep dot positioned properly */
+    margin-left: 40px; /* Adjusted for right-side alignment */
+}
+
+/* Button - Moved Lower */
+.button {
+    background-color: transparent;
+    color: black;
+    padding: 12px 24px;
+    font-size: 18px;
+    font-weight: bold;
+    border: none;
+    border-radius: 8px;
+    box-shadow: none;
+    cursor: pointer;
+    transition: transform 0.2s, box-shadow 0.2s, color 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-top: 0px; /* No need for extra margin */
+    margin-left: 0px; /* Keep it centered */
+}
+
+/* Button Hover Effect */
+.button:hover {
+    color: black;
+    transform: scale(1.05);
+    box-shadow: 0 6px 12px rgba(0, 0, 0, 0.3);
+}
+
+/* "My" and "Order" Text */
+.my {
+    display: inline-block;
+}
+
+.order {
+    display: inline-block;
+    margin-left: -50px; /* Keeping original position */
+    transform: translateY(20px); /* Keeping original effect */
+}
+
+/* Responsive Adjustments */
+@media (max-width: 768px) {
+    .buttonContainer {
+        right: 3px; /* Adjust position for smaller screens */
+        top: 80px; /* Move it even lower on smaller screens */
+    }
+
+    .button {
+        font-size: 16px;
+        padding: 10px 20px;
+    }
+
+    .notificationDot {
+        margin-left: 15px; /* Adjust dot position for smaller screens */
+        top: 50px;
+    }
+}
