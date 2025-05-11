@@ -10,16 +10,21 @@ interface MenuItem {
     _id: string;
     name: string;
     price: number;
-    category: string;
+    category: Category | string;  // It could be a Category object or just a string
     available: boolean;
     image?: string;
 }
+
+type Category = {
+  _id: string;
+  name: string;
+};
 
 const API_URL = 'http://localhost:5000/api/menu'; 
 
 export default function AdminMenuPage() {
     const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
-    const [categories, setCategories] = useState<string[]>([]);
+    const [categories, setCategories] = useState<Category[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [isAddingNewCategory, setIsAddingNewCategory] = useState(false);
@@ -72,15 +77,15 @@ export default function AdminMenuPage() {
 
     // Fetch categories
     const fetchCategories = async () => {
-        try {
-            const res = await fetch(`${API_URL}/categories/all`);
-            if (!res.ok) throw new Error('Failed to fetch categories');
-            const data = await res.json();
-            setCategories(data);
-        } catch (error) {
-            console.error('Failed to fetch categories:', error);
-        }
-    };
+  try {
+    const res = await fetch('http://localhost:5000/api/categories');
+    if (!res.ok) throw new Error('Failed to fetch categories');
+    const data: Category[] = await res.json(); // Ensure proper typing
+    setCategories(data); // Use Category[] instead of string[]
+  } catch (error) {
+    console.error('Failed to fetch categories:', error);
+  }
+};
 
     useEffect(() => {
         fetchMenuItems();
@@ -119,7 +124,7 @@ export default function AdminMenuPage() {
             setImagePreview(null);
             
             // Refresh categories if a new category was added
-            if (!categories.includes(categoryToSubmit)) {
+            if (!categories.some((cat) => cat.name === categoryToSubmit)) {
                 fetchCategories();
             }
         } catch (err){
@@ -169,7 +174,7 @@ export default function AdminMenuPage() {
             setImagePreview(null);
             
             // Refresh categories if a new category was added
-            if (!categories.includes(categoryToSubmit)) {
+            if (!categories.some((cat) => cat.name === categoryToSubmit)) {
                 fetchCategories();
             }
         } catch(err){
@@ -200,7 +205,7 @@ export default function AdminMenuPage() {
         setForm({
             name: item.name,
             price: item.price.toString(),
-            category: item.category,
+             category: typeof item.category === 'object' ? item.category.name : item.category,  // Ensure category is always a string
             available: item.available
         });
         setIsAddingNewCategory(false);
@@ -292,8 +297,8 @@ export default function AdminMenuPage() {
                     >
                         <option value="">Select Category</option>
                         {categories.map((category) => (
-                            <option key={category} value={category}>
-                                {category}
+                            <option key={category._id} value={category.name}>
+                                {category.name}
                             </option>
                         ))}
                         <option value="new">+ Add New Category</option>
@@ -397,7 +402,7 @@ export default function AdminMenuPage() {
                                     </td>
                                     <td>{item.name}</td>
                                     <td>${item.price.toFixed(2)}</td>
-                                    <td>{item.category}</td>
+                                    <td>{typeof item.category === 'object' ? item.category.name : item.category}</td>
                                     <td>
                                         <span className={item.available ? styles.available : styles.unavailable}>
                                             {item.available ? 'Available' : 'Unavailable'}
