@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const MenuItem = require('../models/MenuItem');
 const upload = require('../middlewares/upload'); // Assuming you have a middleware for handling file uploads
+const Category = require('../models/Category'); // Import the Category model
 
 //Predefined categories list
 const predefinedCategories = [
@@ -55,9 +56,9 @@ router.get('/categories', async (req, res) => {
 //Get all predefined categories
 router.get('/categories/all', async (req, res) => {
     try {
-      const dbCategories = await MenuItem.distinct('category'); // dynamic categories from DB
-      const allCategories = Array.from(new Set([...predefinedCategories, ...dbCategories])); // merge + remove duplicates
-      res.json(allCategories); // return the merged list
+      const categories = await Category.find().sort({ position: 1 }).select('name'); // dynamic categories from DB
+      const categoryNames = categories.map(cat => cat.name);
+      res.json(categoryNames); // return the merged list
     } catch (error) {
       res.status(500).json({ error: 'Failed to fetch all categories' });
     }

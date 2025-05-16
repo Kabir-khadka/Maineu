@@ -5,20 +5,11 @@
 
 import React, { useEffect, useState } from "react";
 import styles from './menu.module.css';
+import { MenuItem, Category } from '@/types/menu';
+import MenuItemTable from '@/components/MenuManagement/MenuItemTable'; // Adjust the path if needed
+import SearchBar from '@/components/MenuManagement/SearchBar';
+import FilterBar from '@/components/MenuManagement/FilterBar'; // Adjust the path if needed
 
-interface MenuItem {
-    _id: string;
-    name: string;
-    price: number;
-    category: Category | string;  // It could be a Category object or just a string
-    available: boolean;
-    image?: string;
-}
-
-type Category = {
-  _id: string;
-  name: string;
-};
 
 const API_URL = 'http://localhost:5000/api/menu'; 
 
@@ -27,10 +18,11 @@ export default function AdminMenuPage() {
     const [categories, setCategories] = useState<Category[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
-    const [isAddingNewCategory, setIsAddingNewCategory] = useState(false);
-    const [newCategoryName, setNewCategoryName] = useState('');
     const [imageFile, setImageFile] = useState<File | null>(null);
     const [imagePreview, setImagePreview] = useState<string | null>(null);
+    const [searchQuery, setSearchQuery] = useState('');
+    const [selectedCategory, setSelectedCategory] = useState('');
+    const [selectedAvailability, setSelectedAvailability] = useState('');
 
     const [editingId, setEditingId] = useState<string | null>(null);
     const [form, setForm] = useState({
@@ -39,6 +31,20 @@ export default function AdminMenuPage() {
         category: '',
         available: true
     });
+
+    //Filter items based on search query
+    const filteredItems = menuItems.filter(item => {
+        const matchSearch = item.name.toLowerCase().includes(searchQuery.toLowerCase());
+        const matchesCategory = selectedCategory ? (
+            typeof item.category === 'object' ? item.category.name === selectedCategory : item.category === selectedCategory
+        ): true;
+        const matchesAvailability = selectedAvailability ? (selectedAvailability === 'available' ? item.available : !item.available) : true;
+
+        return matchSearch && matchesCategory && matchesAvailability;
+
+    }
+        
+    );
 
     // Handle image file selection
     const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -97,13 +103,12 @@ export default function AdminMenuPage() {
         e.preventDefault();
 
         try {
-            const categoryToSubmit = isAddingNewCategory ? newCategoryName : form.category;
             
             // Create FormData object for multipart/form-data submission
             const formData = new FormData();
             formData.append('name', form.name);
             formData.append('price', form.price);
-            formData.append('category', categoryToSubmit);
+            formData.append('category', form.category);
             formData.append('available', String(form.available));
             if (imageFile) {
                 formData.append('image', imageFile);
@@ -123,10 +128,7 @@ export default function AdminMenuPage() {
             setImageFile(null);
             setImagePreview(null);
             
-            // Refresh categories if a new category was added
-            if (!categories.some((cat) => cat.name === categoryToSubmit)) {
-                fetchCategories();
-            }
+            
         } catch (err){
             setError('Error adding item');
             console.error('Error adding item:', err);       
@@ -140,13 +142,12 @@ export default function AdminMenuPage() {
         if (!editingId) return;
 
         try {
-            const categoryToSubmit = isAddingNewCategory ? newCategoryName : form.category;
-            
+           
             // Create FormData object for multipart/form-data submission
             const formData = new FormData();
             formData.append('name', form.name);
             formData.append('price', form.price);
-            formData.append('category', categoryToSubmit);
+            formData.append('category', form.category);
             formData.append('available', String(form.available));
             if (imageFile) {
                 formData.append('image', imageFile);
@@ -168,15 +169,9 @@ export default function AdminMenuPage() {
 
             setEditingId(null);
             setForm({ name: '', price: '', category: '', available: true });    
-            setIsAddingNewCategory(false);
-            setNewCategoryName('');
             setImageFile(null);
             setImagePreview(null);
-            
-            // Refresh categories if a new category was added
-            if (!categories.some((cat) => cat.name === categoryToSubmit)) {
-                fetchCategories();
-            }
+
         } catch(err){
             setError('Error updating item');
             console.error('Error updating item:', err);
@@ -208,8 +203,6 @@ export default function AdminMenuPage() {
              category: typeof item.category === 'object' ? item.category.name : item.category,  // Ensure category is always a string
             available: item.available
         });
-        setIsAddingNewCategory(false);
-        setNewCategoryName('');
         
         // Set image preview if the item has an image
         if (item.image) {
@@ -224,8 +217,6 @@ export default function AdminMenuPage() {
     const handleCancel = () => {
         setEditingId(null);
         setForm({ name: '', price: '', category: '', available: true });
-        setIsAddingNewCategory(false);
-        setNewCategoryName('');
         setImageFile(null);
         setImagePreview(null);
     };
@@ -283,17 +274,8 @@ export default function AdminMenuPage() {
                         id="category"
                         name="category"
                         value={form.category}
-                        onChange= { (e) => {
-                            const selected = e.target.value;
-                            if (selected === "new") {
-                                setIsAddingNewCategory(true);
-                                setForm({ ...form, category: '' }); // Clear existing category
-                            } else {
-                                setIsAddingNewCategory(false);
-                                setForm({ ...form, category: selected });
-                            }
-                        }}
-                        required = {!isAddingNewCategory}
+                        onChange={updateForm}
+                        required
                     >
                         <option value="">Select Category</option>
                         {categories.map((category) => (
@@ -301,19 +283,7 @@ export default function AdminMenuPage() {
                                 {category.name}
                             </option>
                         ))}
-                        <option value="new">+ Add New Category</option>
-                    </select>
-                    
-                    {isAddingNewCategory && (
-                        <input
-                            //name="category"
-                            placeholder="Enter new category"
-                            value={newCategoryName}
-                            onChange={(e) => setNewCategoryName(e.target.value)}
-                            className={styles.newCategoryInput}
-                            required
-                        />
-                    )}
+                    </select>                 
                 </div>
                 
                 <div className={styles.formGroup}>
@@ -368,66 +338,31 @@ export default function AdminMenuPage() {
 
             <div className={styles.menuList}>
                 <h2>Menu Items</h2>
+
+                <div className={styles.searchContainer}>
+                    <SearchBar
+                        searchQuery={searchQuery}
+                        onSearchChange={setSearchQuery}
+                    />
+                </div>
+                <FilterBar
+                        categories={categories}
+                        selectedCategory={selectedCategory}
+                        onCategoryChange={setSelectedCategory}
+                        selectedAvailability={selectedAvailability}
+                        onAvailabilityChange={setSelectedAvailability}
+                    />
                 
                 {isLoading ? (
                     <p>Loading menu items...</p>
-                ) : menuItems.length === 0 ? (
-                    <p>No menu items found. Add some items to get started.</p>
                 ) : (
-                    <table className={styles.table}>
-                        <thead>
-                            <tr>
-                                <th>Image</th>
-                                <th>Name</th>
-                                <th>Price</th>
-                                <th>Category</th>
-                                <th>Status</th>
-                                <th>Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {menuItems.map((item) => (
-                                <tr key={item._id}>
-                                    <td>
-                                        {item.image ? (
-                                            <img 
-                                                src={`http://localhost:5000${item.image}`} 
-                                                alt={item.name} 
-                                                width="50" 
-                                                className={styles.itemImage}
-                                            />
-                                        ) : (
-                                            <span className={styles.noImage}>No image</span>
-                                        )}
-                                    </td>
-                                    <td>{item.name}</td>
-                                    <td>${item.price.toFixed(2)}</td>
-                                    <td>{typeof item.category === 'object' ? item.category.name : item.category}</td>
-                                    <td>
-                                        <span className={item.available ? styles.available : styles.unavailable}>
-                                            {item.available ? 'Available' : 'Unavailable'}
-                                        </span>
-                                    </td>
-                                    <td>
-                                        <button 
-                                            onClick={() => handleEdit(item)} 
-                                            className={styles.editButton}
-                                        >
-                                            Edit
-                                        </button>
-                                        <button 
-                                            onClick={() => handleDelete(item._id)} 
-                                            className={styles.deleteButton}
-                                        >
-                                            Delete
-                                        </button>
-                                    </td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
-                )}
-            </div>
+                    <MenuItemTable 
+                        items={filteredItems} 
+                        onEdit={handleEdit} 
+                        onDelete={handleDelete} 
+                    />
+                  )}
+                </div>
         </div>
     );
 }
