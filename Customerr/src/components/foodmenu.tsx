@@ -29,19 +29,17 @@ const FoodMenu = () => {
     try {
       const res = await fetch('http://localhost:5000/api/menu/categories/all');
         if (!res.ok) throw new Error('Failed to fetch categories');
-        const data: string[] = await res.json();
-        setCategories(data);
-        //Set the first category as active if no category is active yet
-        if (data.length > 0) {
-          setCategories(data);
-          setActiveButton(prev => prev || data[0]);
-        }
-      
-    } catch (err) {
-      console.error(err);
+        const categoryNames: string[] = await res.json();
+        setCategories(categoryNames);
+        // Automatically activate the first category
+    if (categoryNames.length > 0) {
+      setActiveButton(prev => prev || categoryNames[0]);
     }
-  };
-
+  } catch (err) {
+    console.error(err);
+    setError('Failed to load categories');
+  }
+};
 
   const fetchMenuItems = async (category: string) => {
     setIsLoading(true);
