@@ -115,6 +115,43 @@
     color: #333;
   }
   
+
+  .pagination {
+  display: flex;
+  justify-content: center;
+  margin-top: 1rem;
+  gap: 0.5rem;
+}
+
+.page-button {
+  padding: 6px 12px;
+  background-color: white;
+  border: 1px solid #ccc;
+  color: #333;
+  cursor: pointer;
+  border-radius: 4px;
+  font-size: 14px;
+  transition: background-color 0.3s, color 0.3s;
+}
+
+.page-button:hover {
+  background-color: #f0f0f0;
+}
+
+.page-button.active {
+  background-color: #007bff;
+  color: white;
+  border-color: #007bff;
+}
+
+
+.activePage {
+  background: #0070f3;
+  color: white;
+  font-weight: bold;
+}
+
+  
   .table {
     width: 100%;
     border-collapse: collapse;
