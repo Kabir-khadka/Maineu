@@ -6,9 +6,14 @@
 import React, { useEffect, useState } from "react";
 import styles from './menu.module.css';
 import { MenuItem, Category } from '@/types/menu';
+import ToggleSwitch from '@/components/MenuManagement/ToggleSwitch';
 import MenuItemTable from '@/components/MenuManagement/MenuItemTable'; // Adjust the path if needed
 import SearchBar from '@/components/MenuManagement/SearchBar';
 import FilterBar from '@/components/MenuManagement/FilterBar'; // Adjust the path if needed
+import tooglestyles from '@/components/MenuManagement/MenuManagement.module.css';
+import SimplePagination from '@/components/MenuManagement/SimplePagination';//Import the simple pagination component
+import BulkActionBar from  "@/components/MenuManagement/BulkActionBar";
+
 
 
 const API_URL = 'http://localhost:5000/api/menu'; 
@@ -23,6 +28,9 @@ export default function AdminMenuPage() {
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedCategory, setSelectedCategory] = useState('');
     const [selectedAvailability, setSelectedAvailability] = useState('');
+    const [currentPage, setCurrentPage] = useState(1);
+    const itemsPerPage = 12; // Number of items to display per page
+    const [selectedItems, setSelectedItems] = useState<string[]>([]); // For bulk actions
 
     const [editingId, setEditingId] = useState<string | null>(null);
     const [form, setForm] = useState({
@@ -45,6 +53,17 @@ export default function AdminMenuPage() {
     }
         
     );
+
+    const indexOfLastItem = currentPage * itemsPerPage;
+    const indexOfFirstItem = indexOfLastItem - itemsPerPage;
+    const currentItems = filteredItems.slice(indexOfFirstItem, indexOfLastItem);
+
+    const totalPages = Math.ceil(filteredItems.length / itemsPerPage);
+
+    //Function to handle page changes from SimplePagination component
+    const handlePageChange = (page: number) => {
+        setCurrentPage(page);
+    }
 
     // Handle image file selection
     const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -97,6 +116,10 @@ export default function AdminMenuPage() {
         fetchMenuItems();
         fetchCategories();
     }, []);
+
+    useEffect(() => {
+    setCurrentPage(1); // reset to first page when filters/search changes
+}, [searchQuery, selectedCategory, selectedAvailability]);
 
     // Add new item with image
     const handleAdd = async (e: React.FormEvent) => {
@@ -193,6 +216,119 @@ export default function AdminMenuPage() {
             console.error('Error deleting items:', err);
         }
     };
+
+    //Toogle item availability
+    const handleToggleAvailability = async (id: string) => {
+        try {
+            //Update UI optimistically
+            const updatedItems = menuItems.map(item => 
+                item._id === id ? { 
+
+                    ...item,
+                    available : !item.available } : item
+                
+            );
+            setMenuItems(updatedItems);
+
+            //Make API call to persist change
+            const res = await fetch(`${API_URL}/${id}/toggle`, {
+                method: 'PATCH',
+            });
+
+            if (!res.ok) {
+                throw new Error('Failed to update availability');
+                //If API call fails, revert UI change by re-fetching data
+                fetchMenuItems();
+            }
+        } catch (err) {
+            setError('Error updating availability');
+            console.error('Error updating availability:', err);
+            //Revert UI change by re-fetching data
+            fetchMenuItems();
+        }
+    }
+
+    //Bulk action handlers
+    const handleSelectItem = (id: string, selected: boolean) => {
+        setSelectedItems((prev) => selected
+            ? [...prev, id]
+            : prev.filter(itemId => itemId !== id)
+        );
+    };
+
+    const handleSelectAll = (selected: boolean, visibleItemIds: string[]) => {
+        if (selected) {
+            setSelectedItems(prev => [...new Set([...prev, ...visibleItemIds])]);
+
+        } else {
+            setSelectedItems(prev => prev.filter(id => !visibleItemIds.includes(id)));
+        }
+    };
+
+    const handleDeleteSelected = async () => {
+        if (!confirm('Are you sure you want to delete selected items?')) return;
+
+        try {
+            // Use bulk delete endpoint instead of individual deletes
+            
+                const res = await fetch(`${API_URL}`, { 
+                method: 'DELETE ',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ ids: selectedItems})
+            });
+
+            if (!res.ok) throw new Error('Failed to delete selected items');
+            
+            setMenuItems((prev) => prev.filter(item => !selectedItems.includes(item._id)));
+            setSelectedItems([]);
+        } catch (error) {
+            setError('Error deleting selected items');
+            console.error('Error deleting selected items:', error);
+            fetchMenuItems(); // Re-fetch items to ensure UI is in sync
+        }
+    };
+
+    const handleToggleAvailabilitySelected = async () => {
+        try {
+            
+            const res = await fetch(`${API_URL}/toggle`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ ids : selectedItems })
+            });
+            if (!res.ok) throw new Error('Failed to toggle availability');
+            
+            fetchMenuItems(); // Re-fetch data after bulk update
+            setSelectedItems([]);
+        } catch (err) {
+            setError('Error updating availability for selected items');
+            console.error('Error updating availability for selected items:', err);
+            fetchMenuItems(); // Re-fetch items to ensure UI is in sync
+        }
+    };
+
+    const handleChangeCategory = async (newCategory: string) => {
+        try {
+            //Use the bulk update endpoint to change category
+            const res = await fetch(`${API_URL}/change-category`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    ids: selectedItems,
+                    category: newCategory
+                })
+            });
+
+            if(!res.ok) throw new Error('Failed to update category');
+
+            fetchMenuItems(); // Re-fetch data after bulk update
+            setSelectedItems([]);
+        } catch (err) {
+            setError('Error updating category for selected items');
+            console.error('Error changing category for selected items:', err);
+            fetchMenuItems(); // Re-fetch items to ensure UI is in sync
+        }
+    }
 
     //Start editing an item
     const handleEdit = (item: MenuItem) => {
@@ -307,16 +443,12 @@ export default function AdminMenuPage() {
                     )}
                 </div>
                 
-                <div className={styles.formGroup}>
-                    <label className={styles.checkboxLabel}>
-                        <input 
-                            name="available" 
-                            type="checkbox" 
-                            checked={form.available} 
-                            onChange={updateForm} 
-                        />
-                        Available
-                    </label>
+                <div className={tooglestyles.formGroup}>
+                    <ToggleSwitch
+                         checked={form.available}
+                         onChange={(checked) => setForm({ ...form, available: checked })}
+                         label="Available"
+                    />
                 </div>
                 
                 <div className={styles.formActions}>
@@ -352,15 +484,40 @@ export default function AdminMenuPage() {
                         selectedAvailability={selectedAvailability}
                         onAvailabilityChange={setSelectedAvailability}
                     />
+
+                    {/* Bulk Action Bar */}
+                    <BulkActionBar
+                       selectedIds={selectedItems}
+                        onDeleteSelected={handleDeleteSelected}
+                        onToggleAvailabilitySelected={handleToggleAvailabilitySelected}
+                        onChangeCategory={handleChangeCategory}
+                        categories={categories.map(c => c.name)}
+                    />
                 
                 {isLoading ? (
                     <p>Loading menu items...</p>
                 ) : (
                     <MenuItemTable 
-                        items={filteredItems} 
+                        items={currentItems} 
                         onEdit={handleEdit} 
                         onDelete={handleDelete} 
+                        onToggleAvailability={handleToggleAvailability}
+                        onSelectItem={handleSelectItem}
+                        onSelectAll={handleSelectAll}
+                        selectedItems={selectedItems}
                     />
+                  )}
+
+                  {totalPages > 0 && (
+                    <div className={styles.paginationWrapper}>
+                        <SimplePagination
+                            currentPage={currentPage}
+                            totalPages={totalPages}
+                            onPageChange={handlePageChange}
+                        />
+
+                    </div>
+
                   )}
                 </div>
         </div>
