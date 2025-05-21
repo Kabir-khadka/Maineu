@@ -27,6 +27,13 @@ export const OrderProvider: React.FC<{children: React.ReactNode}> = ({ children 
     const addOrderItem = (item: OrderItem) => {
         setOrderItems(prevItems => {
             const existingIndex = prevItems.findIndex(i => i.name === item.name);
+
+            //Remove the item if quantity is 0
+            if (item.quantity === 0) {
+                return prevItems.filter(i => i.name !== item.name);
+            }
+
+            
             if (existingIndex > -1) {
                 const newItems = [...prevItems];
                 newItems[existingIndex] = item;

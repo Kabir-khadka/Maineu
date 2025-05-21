@@ -15,7 +15,7 @@ const MyOrderButton: React.FC = () => {
     <div className={styles.buttonContainer}>
       {isClient && <span className={styles.notificationDot}></span>}
       {/* Link wraps only the button */}
-      <Link href="/myorder">
+      <Link href="/myordercustomerside">
         <button className={styles.button}>
           <span className={styles.my}>My</span>
           <span className={styles.order}>Order</span>
