@@ -92,7 +92,7 @@ const FoodMenu = () => {
   const decreaseQuantity = (item : MenuItemWithQuantity) => {
     if (item.quantity > 0) {
       const updatedItems = menuItems.map((menuItem) => 
-        menuItem._id == menuItem._id
+        menuItem._id == item._id
           ? { ...menuItem, quantity: Math.max(0, menuItem.quantity - 1)}
            : menuItem
         );

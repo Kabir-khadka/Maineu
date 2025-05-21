@@ -1,0 +1,1 @@
+export type OrderStatus = 'In progress' | 'Delivered' | 'paid';

@@ -18,6 +18,7 @@ const MyOrderPage: React.FC = () => {
 
     const handleConfirmOrder = async () => {
       console.log("Current Order Items:", orderItems); // <-- Check orderItems before sending
+      
   
       const storedTableNumber = sessionStorage.getItem('tableNumber');
       if (!storedTableNumber) {
