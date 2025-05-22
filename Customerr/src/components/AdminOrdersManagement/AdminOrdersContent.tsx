@@ -15,6 +15,7 @@ interface Order {
     orderItems: OrderItem[];
     totalPrice: number;
     status: 'In progress' | 'Delivered' | 'Paid' | string;
+    statusHistory?: string[];
     createdAt: string;
 }
 
@@ -59,6 +60,43 @@ export default function AdminOrdersContent() {
         }
     };
 
+    // Function to revert order statuses
+    const revertStatus = async (orderId: string) => {
+        try {
+            const res = await fetch(`http://localhost:5000/api/orders/${orderId}/revert-status`, {
+                method: 'PATCH',
+            });
+            if (res.ok) {
+                const updatedOrder = await res.json();
+                setOrders((prev) => 
+                    prev.map((order) => (order._id === orderId ? updatedOrder : order))
+                );
+            } else {
+                console.error('Failed to revert status');
+            }
+        } catch (err) { 
+            console.error('Error reverting status:', err);
+        }
+    };
+
+    const archiveOrder = async (orderId: string) => {
+        if (!confirm('Are you sure you want to archive this order?')) return;
+
+        try {
+            const res = await fetch(`http://localhost:5000/api/orders/${orderId}/archive`, {
+                method: 'DELETE',
+            });
+
+            if (res.ok) {
+                setOrders(prev => prev.filter(order => order._id !== orderId));
+            } else {
+                console.error('Failed to archive order');
+            }
+        } catch (err) {
+            console.error('Error archiving order:', err);
+        }
+    };
+
     if (loading) return <div className="p-4 text-gray-500">Loading orders...</div>;
 
     return (
@@ -93,6 +131,24 @@ export default function AdminOrdersContent() {
                                         className="text-sm px-3 py-1 bg-green-300 rounded hover:bg-green-400 transition"
                                     >
                                         Paid
+                                    </button>
+                                )}
+                                {order.status === 'Paid' && (
+                                    <button
+                                        onClick={() => archiveOrder(order._id)}
+                                        className="text-sm px-3 py-1 bg-red-300 rounded hover:bg-green-400 transition"
+                                    >
+                                        Delete
+                                    </button>
+                                )}
+
+                                {/* Revert status button */}
+                                {order.statusHistory && order.statusHistory.length > 0 && (
+                                    <button
+                                        onClick={() => revertStatus(order._id)}
+                                        className="text-sm px-3 py-1 bg-blue-300 rounded hover:bg-blue-400 transition"
+                                    >
+                                        Revert
                                     </button>
                                 )}
                             </div>
