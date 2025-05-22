@@ -22,7 +22,7 @@ export default function TableCard({ tableNumber, status, onClick }: TableCardPro
             className={`rounded-xl shadow p-4 cusrsor-pointer hover:shadow-lg transition-all border border-gray-200 ${bgColor}`}
             >
                 <div className="flex justify-between items-center mb-2">
-                    <span className="font-bold text-lg">B{tableNumber}</span>
+                    <span className="font-bold text-lg">T{tableNumber}</span>
                 </div>
 
                 <p className="text-sm mt-2">

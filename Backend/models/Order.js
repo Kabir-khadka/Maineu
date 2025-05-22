@@ -14,7 +14,12 @@ const orderSchema = new mongoose.Schema({
     status: { 
         type: String,
         enum: ['In progress', 'Delivered', 'Paid'],
-        default: 'In progress' }, // e.g., pending, confirmed, preparing, delivered
-}, { timestamps: true });
+        default: 'In progress'  // e.g., pending, confirmed, preparing, delivered
+}, 
+statusHistory: {
+    type: [String],
+    default: []
+}
+},{ timestamps: true });
 
 module.exports = mongoose.model('Order', orderSchema);
