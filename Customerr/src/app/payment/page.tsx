@@ -41,7 +41,7 @@ const PaymentPage: React.FC = () => {
 
     return (
         <div style={pageStyle}>
-            <button style={backButtonStyle} onClick={() => router.push('/myorder')}>
+            <button style={backButtonStyle} onClick={() => router.push('/myordercustomerside')}>
                 ← Back
             </button>
 

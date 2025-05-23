@@ -33,7 +33,6 @@ const Styles = {
         width: '85%',
         padding: '10px 0px',
         marginLeft: '-10px',
-        backgroundColor: '#f7f7f8', // light background color
         zIndex: 1000,//Ensure it stays on top of other elements
 },
 searchInput: {
