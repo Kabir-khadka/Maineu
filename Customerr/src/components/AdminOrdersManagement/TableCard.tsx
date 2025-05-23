@@ -1,6 +1,6 @@
 import React from 'react';
 import { FaChair } from 'react-icons/fa';
-import { OrderStatus } from '@/types/order';
+import { Order, OrderItem } from '@/types/order';
 
 interface TableCardProps {
     tableNumber: string;

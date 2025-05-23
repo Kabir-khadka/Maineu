@@ -2,26 +2,16 @@
 
 import React, { useEffect, useState } from 'react';
 import TableCard from './TableCard';
+import {Order, OrderItem} from '@/types/order';
+import OrderDetailSidebar from './OrderDetailSidebar';
 
-interface OrderItem {
-    name: string;
-    quantity: number;
-    price: number;
-}
-
-interface Order {
-    _id: string;
-    tableNumber: string;
-    orderItems: OrderItem[];
-    totalPrice: number;
-    status: 'In progress' | 'Delivered' | 'Paid' | string;
-    statusHistory?: string[];
-    createdAt: string;
-}
 
 export default function AdminOrdersContent() {
     const [orders, setOrders] = useState<Order[]>([]);
     const [loading, setLoading] = useState(true);
+    const [selectedOrder, setSelectedOrder] = useState<Order | null>(null); //For order detail sidebar
+    const [showSidebar, setShowSidebar] = useState(false); //Toggle sidebar
+
 
     useEffect(() => {
         const fetchOrders = async () => {
@@ -38,6 +28,18 @@ export default function AdminOrdersContent() {
 
         fetchOrders();
     }, []);
+
+    // Function to handle card click
+    const handleCardClick = (order: Order) => {
+        setSelectedOrder(order);
+        setShowSidebar(true);
+    }
+
+    // Function to close sidebar
+    const handleCloseSidebar = () => {
+        setSelectedOrder(null);
+        setShowSidebar(false);
+    }
 
     // ✅ Function to update order status
     const updateStatus = async (orderId: string, newStatus: 'Delivered' | 'Paid') => {
@@ -108,11 +110,14 @@ export default function AdminOrdersContent() {
             ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                     {orders.map((order) => (
-                        <div key={order._id} className="bg-white shadow-md rounded-xl p-4 border border-gray-200">
+                        <div 
+                             key={order._id} 
+                             className="bg-white shadow-md rounded-xl p-4 border border-gray-200"
+                             >
                             <TableCard
                                 tableNumber={order.tableNumber}
                                 status={order.status as 'In progress' | 'Delivered' | 'Paid'}
-                                onClick={() => console.log('Order details:', order)}
+                                onClick={() => handleCardClick(order)} // Trigger sidebar
                             />
 
                             {/* Admin status buttons */}
@@ -156,6 +161,13 @@ export default function AdminOrdersContent() {
                     ))}
                 </div>
             )}
+
+            {/*Sidebar Integration*/}
+            <OrderDetailSidebar
+               order={selectedOrder}
+               show={showSidebar}
+               onClose={handleCloseSidebar}
+            />
         </div>
     );
 }
