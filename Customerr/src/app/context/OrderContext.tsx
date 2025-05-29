@@ -11,6 +11,8 @@ interface OrderContextType {
     addOrderItem: (item: OrderItem) => void;
     increaseItemQuantity: (name: string) => void;
     decreaseItemQuantity: (name: string) => void;
+    getNewlyAddedItems: () => OrderItem[]; // New function to get only incremental items
+    confirmCurrentOrder: () => void;
 }
 
 
@@ -18,11 +20,14 @@ const OrderContext = createContext<OrderContextType>({
     orderItems: [],
     addOrderItem: () => {},
     increaseItemQuantity: () => {},
-    decreaseItemQuantity: () => {}
+    decreaseItemQuantity: () => {},
+    getNewlyAddedItems: () => [],
+    confirmCurrentOrder: () => {},
 });
 
 export const OrderProvider: React.FC<{children: React.ReactNode}> = ({ children }) => {
     const [orderItems, setOrderItems] = useState<OrderItem[]>([]);
+    const [confirmedItems, setConfirmedItems] = useState<OrderItem[]>([]); // Track what's been ordered
 
     const addOrderItem = (item: OrderItem) => {
         setOrderItems(prevItems => {
@@ -33,7 +38,6 @@ export const OrderProvider: React.FC<{children: React.ReactNode}> = ({ children 
                 return prevItems.filter(i => i.name !== item.name);
             }
 
-            
             if (existingIndex > -1) {
                 const newItems = [...prevItems];
                 newItems[existingIndex] = item;
@@ -63,12 +67,40 @@ export const OrderProvider: React.FC<{children: React.ReactNode}> = ({ children 
         );
     };
 
+    // Get only the newly added items (difference between current and confirmed)
+    const getNewlyAddedItems = (): OrderItem[] => {
+        const newlyAdded: OrderItem[] = [];
+        orderItems.forEach(currentItem => {
+            const confirmedItem = confirmedItems.find(c => c.name === currentItem.name);
+            const confirmedQty = confirmedItem ? confirmedItem.quantity : 0;
+            const newlyAddedQty = currentItem.quantity - confirmedQty;
+            
+            if (newlyAddedQty > 0) {
+                newlyAdded.push({
+                    ...currentItem,
+                    quantity: newlyAddedQty
+                });
+            }
+            // If quantity decreased for an item, it won't be in newlyAdded, which is correct.
+            // If an item was removed, it won't be in orderItems, so it's not considered here.
+        });
+        return newlyAdded;
+    };
+
+    //  NEW: Call this after a successful order submission
+    const confirmCurrentOrder = () => {
+        setConfirmedItems([...orderItems]);
+    };
+
+
     return (
         <OrderContext.Provider value={{ 
             orderItems, 
             addOrderItem,
             increaseItemQuantity,
-            decreaseItemQuantity
+            decreaseItemQuantity,
+            getNewlyAddedItems,
+            confirmCurrentOrder, // <--- ADD THIS
             }}>
             {children}
         </OrderContext.Provider>

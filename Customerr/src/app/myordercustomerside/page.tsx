@@ -4,9 +4,11 @@ import React, { useState } from "react";
 import { useRouter } from 'next/navigation'; // Import useRouter for navigation
 import { useOrder } from '../context/OrderContext';
 
+const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL;
+
 const MyOrderPage: React.FC = () => {
     const router = useRouter(); // Initialize the useRouter hook
-    const { orderItems, increaseItemQuantity, decreaseItemQuantity } = useOrder(); // Access the context with quantity handlers
+    const { orderItems, increaseItemQuantity, decreaseItemQuantity, getNewlyAddedItems, confirmCurrentOrder } = useOrder(); // Access the context with quantity handlers
     const [isHovered, setIsHovered] = useState(false);
 
 
@@ -16,8 +18,10 @@ const MyOrderPage: React.FC = () => {
         0
     );
 
-    const handleConfirmOrder = async () => {
-      console.log("Current Order Items:", orderItems); // <-- Check orderItems before sending
+        const handleConfirmOrder = async () => {
+      // Get only newly added items
+      const newlyAddedItems = getNewlyAddedItems();
+      console.log("Newly Added Items:", newlyAddedItems); // <-- Check newly added items
       
   
       const storedTableNumber = sessionStorage.getItem('tableNumber');
@@ -26,24 +30,24 @@ const MyOrderPage: React.FC = () => {
           return;
       }
   
-      if (orderItems.length === 0) {
+      if (newlyAddedItems.length === 0) {
           alert("No items in the order!");
           return;
       }
 
-      const totalPrice = orderItems.reduce(
+      const totalPrice = newlyAddedItems.reduce(
         (total, item) => total + item.quantity * item.price,
         0
       )
   
       const orderData = {
           tableNumber: storedTableNumber,
-          orderItems,
+          orderItems: newlyAddedItems,
           totalPrice,
       };
   
       try {
-          const response = await fetch('http://localhost:5000/api/orders', {
+          const response = await fetch(`${BACKEND_URL}/api/orders`, {
               method: 'POST',
               headers: {
                   'Content-Type': 'application/json'
@@ -53,9 +57,13 @@ const MyOrderPage: React.FC = () => {
   
           if (response.ok) {
               alert('Order confirmed successfully!');
+
+              confirmCurrentOrder(); // Update confirmedItems in context after successful order
+
               router.push('/payment');
           } else {
-              alert('Failed to confirm order. Please try again.');
+            const errorData = await response.json(); // Assuming backend sends JSON error
+           alert(`Failed to confirm order: ${errorData.message || 'Unknown error'}. Please try again.`);
           }
       } catch (error) {
           console.error('Error confirming order:', error);
@@ -64,7 +72,7 @@ const MyOrderPage: React.FC = () => {
   };
   
 
-    return (
+      return (
         <div style={pageStyle}>
             {/* Back Button */}
             <button 
@@ -77,34 +85,38 @@ const MyOrderPage: React.FC = () => {
             {/* Page Content */}
             <h1 style={headingStyle}>My Orders</h1>
 
-            { orderItems.map((item, index) => (
-                <div
-                    key={index}
-                    style= {orderItemStyle}>
-                <span>
-                {item.name} - Quantity: {item.quantity} - Price: ${item.price * item.quantity}
-                </span>
-                <div style={quantityControlStyle}>
-                    {/* Decrease Button*/}
-                    <button
-                    onClick={() => decreaseItemQuantity(item.name)}
-                    style={quantityButtonStyle}
-                    >
-                        -
-                    </button> 
+            { orderItems.length === 0 ? (
+                <p style={{ color: '#666', marginTop: '20px' }}>Your order is empty.</p>
+            ) : (
+                orderItems.map((item, index) => (
+                    <div
+                        key={index}
+                        style= {orderItemStyle}>
+                    <span>
+                    {item.name} - Quantity: {item.quantity} - Price: ${item.price * item.quantity}
+                    </span>
+                    <div style={quantityControlStyle}>
+                        {/* Decrease Button*/}
+                        <button
+                        onClick={() => decreaseItemQuantity(item.name)}
+                        style={quantityButtonStyle}
+                        >
+                            -
+                        </button> 
 
-                    <span style={quantityTextStyle}>{item.quantity}</span>
+                        <span style={quantityTextStyle}>{item.quantity}</span>
 
-                    {/* Increase Button */}
-                    <button
-                    onClick={() => increaseItemQuantity(item.name)}
-                    style={quantityButtonStyle}
-                    >
-                      +    
-                    </button>  
-                </div>
-            </div>
-            ))}
+                        {/* Increase Button */}
+                        <button
+                        onClick={() => increaseItemQuantity(item.name)}
+                        style={quantityButtonStyle}
+                        >
+                            +    
+                        </button>  
+                    </div>
+                    </div>
+                ))
+            )}
 
             {/* Total Bill Section */}
             <div
@@ -141,14 +153,15 @@ const MyOrderPage: React.FC = () => {
                  style={{
                     ...confirmOrderButtonStyle,
                     ...(isHovered ? hoverStyle : {}),
-                 }}
-                 onMouseEnter={() => setIsHovered(true)}
-                 onMouseLeave={() => setIsHovered(false)}
-                 onClick={handleConfirmOrder}
-                 disabled={orderItems.length === 0}
-                 >
-                    Confirm Order
-                 </button>
+                   }}
+                   onMouseEnter={() => setIsHovered(true)}
+                   onMouseLeave={() => setIsHovered(false)}
+                   onClick={handleConfirmOrder}
+                   // Disable if no new items to order (or if total cart is empty)
+                   disabled={getNewlyAddedItems().length === 0 && orderItems.length === 0} 
+                   >
+                     Confirm Order
+                   </button>
         </div>
     );
 };
