@@ -3,6 +3,8 @@
 import React, { use, useEffect, useState } from 'react';
 import { useOrder } from '@/app/context/OrderContext';
 
+const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL;
+
 interface MenuItem {
   _id: string;
   name: string;
@@ -27,7 +29,7 @@ const FoodMenu = () => {
   // Fecth categories from the server
   const fetchCategories = async () => {
     try {
-      const res = await fetch('http://localhost:5000/api/menu/categories/all');
+      const res = await fetch(`${BACKEND_URL}/api/menu/categories/all`);
         if (!res.ok) throw new Error('Failed to fetch categories');
         const categoryNames: string[] = await res.json();
         setCategories(categoryNames);
@@ -45,7 +47,7 @@ const FoodMenu = () => {
     setIsLoading(true);
     setError(null);
     try {
-      const res = await fetch(`http://localhost:5000/api/menu?category=${category}`);
+      const res = await fetch(`${BACKEND_URL}/api/menu?category=${category}`);
       if (!res.ok) throw new Error('Failed to fetch');
       const data: MenuItem[] = await res.json();
       // Add quantity field to each item
@@ -141,7 +143,7 @@ const FoodMenu = () => {
           menuItems.map((item) => (
             <div key={item._id} style={styles.card}>
               <img
-                src={`http://localhost:5000${item.image}`}
+                src={`${BACKEND_URL}${item.image}`}
                 alt={item.name}
                 style={styles.image}
               />
