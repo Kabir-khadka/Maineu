@@ -14,4 +14,5 @@ export interface Order {
   status: 'In progress' | 'Delivered' | 'Paid' | string;
   statusHistory?: string[];
   createdAt: string;
+  updatedAt: string;
 }

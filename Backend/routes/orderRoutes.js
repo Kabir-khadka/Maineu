@@ -5,6 +5,7 @@ const ArchivedOrder = require('../models/ArchivedOrder'); // Import the Archived
 
 
 // POST route to create a new order
+//This route will be used specifically for new items or increases in quantity.
 router.post('/orders', async (req, res) => {
     try {
         const { tableNumber, orderItems, totalPrice } = req.body;
@@ -27,11 +28,64 @@ router.post('/orders', async (req, res) => {
         // Save the order to the database
         await newOrder.save();
         // Send a response back to the client
-        console.log('Recieved order:', req.body);
+        console.log('Recieved order:', newOrder._id, req.body);
         res.status(201).json({message: 'Order recieved successfully!', orderId: newOrder._id});
     } catch (error) {
         console.error('Error saving order:', error);
         res.status(500).json({message: 'Error saving order' });
+    }
+});
+
+// 2. GET endpoint: Fetch ALL active (unpaid) orders for a given table number
+//    This is crucial for MyOrderPage to know all existing orders to modify/track.
+//    We need to fetch ALL active orders to accurately track individual item quantities.
+router.get('/orders/table/:tableNumber/active', async (req, res) => {
+    try {
+        const { tableNumber } = req.params;
+        // Find all orders for this table that are NOT 'Paid'
+        const activeOrders = await Order.find({
+            tableNumber: tableNumber,
+            status: { $ne: 'Paid' }
+        }).sort({ createdAt: 1 }); // Sort by creation date to process oldest first if needed
+
+        res.status(200).json(activeOrders);
+    } catch (err) {
+        console.error('Error fetching active orders for table:', err);
+        res.status(500).json({ message: 'Error fetching active orders' });
+    }
+});
+
+//PATCH endpoint to update an existing order's items
+//This will be used when a table modifies an existing order(decrease, removal)
+router.patch('/orders/:id', async (req, res) => {
+    try {
+        const { orderItems, totalPrice} = req.body;
+
+        //orderItems can be an empty array if all items are removed from this specidic order
+        if (orderItems === undefined || totalPrice === undefined) {
+            return res.status(400).json({ message: 'Missing order items or total price data.'});
+
+        }
+
+        const order = await Order.findById(req.params.id);
+        if (!order) {
+            return res.status(404).json({ error: 'Order not found' });
+        }
+
+        if (order.status === 'Paid') {
+            return res.status(400).json({ message: 'Cannot modify a paid order.' });
+        }
+
+        //Update order items and total price by replacing the existing arrays
+        order.orderItems = orderItems;
+        order.totalPrice = totalPrice;
+        await order.save();
+
+        console.log('Updated order (PATCH):', order._id, orderItems);
+        res.json(order);
+    } catch (err) {
+        console.erorr('Error updating order:', err);
+        res.status(500).json({ error: 'Failed to update order' });
     }
 });
 
@@ -46,7 +100,9 @@ router.get('/orders', async (req, res) => {
     }
 });
 
-//PATCH - Update order status
+
+
+//PATCH - Update an order status
 router.patch('/orders/:id/status', async (req, res) => {
     const { status } = req.body;
 

@@ -37,6 +37,23 @@ export default function AdminOrdersContent() {
         return acc;
     }, {} as Record<string, Order[]>)
 
+    //Converting groupedOrders object to an array of [tableNumber, orders] pairs
+    //And then sort them by the latest order's createdAt timestamp
+    const sortedTableGroups = Object.entries(groupedOrders).sort(([tableNumA, ordersA], [tableNumB, ordersB]) => {
+        //Find the latest order for Table A
+        const latestOrderA = ordersA.reduce((latest, current) => {
+            return (new Date(current.createdAt || '').getTime() > new Date(latest.createdAt || '').getTime()) ? current : latest;
+        });
+
+        // Find the latest order for Table B
+        const latestOrderB = ordersB.reduce((latest, current) => {
+            return (new Date(current.createdAt || '').getTime() > new Date(latest.createdAt || '').getTime()) ? current : latest;
+        });
+
+        //Sort in descending order (newest first)
+        return new Date(latestOrderB.createdAt || '').getTime() - new Date(latestOrderA.createdAt || '').getTime();
+    });
+
     // Function to handle card click - now handles all orders for a table
     const handleCardClick = (tableOrders: Order[]) => {
         setSelectedOrder(tableOrders);
@@ -236,11 +253,11 @@ export default function AdminOrdersContent() {
                 <p className="text-gray-500">No orders found.</p>
             ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    {Object.entries(groupedOrders).map(([tableNumber, tableOrders]) => {
+                    {sortedTableGroups.map(([tableNumber, tableOrders]) => {
                         //Getting the latest order or most relevant status for the table
-                        const latestOrder = tableOrders.sort((a, b) => 
-                        new Date(a.createdAt || '').getTime() - new Date(b.createdAt || '').getTime()
-                        )[0];
+                        const latestOrder = tableOrders.reduce((latest, current) => {
+                         return (new Date(current.createdAt || '').getTime() > new Date(latest.createdAt || '').getTime()) ? current : latest;
+                    });
                     return (
                         <div 
                              key={tableNumber} 
