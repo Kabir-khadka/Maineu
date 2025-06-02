@@ -84,6 +84,13 @@ const FoodMenu = () => {
     : menuItem
   );
   setMenuItems(updatedItems);
+
+  console.log("=== FoodMenu increaseQuantity ===");
+    console.log("Adding item to order:", {
+        name: item.name,
+        quantity: item.quantity + 1,
+        price: item.price,
+    });
   addOrderItem({
     name: item.name,
     quantity: item.quantity + 1,
