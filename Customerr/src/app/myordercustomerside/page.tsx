@@ -1,6 +1,6 @@
-"use client"
+'use client';
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useOrder } from '../context/OrderContext';
 import {Order, OrderItem} from '@/types/order';
@@ -67,13 +67,11 @@ const MyOrderPage: React.FC = () => {
                 const fetchedOrders: Order[] = await response.json();
                 console.log('Fetched orders (raw data):', fetchedOrders);
 
-                // --- MODIFIED LOGIC HERE ---
                 // Always call setInitialActiveOrders with the fetched data.
                 // It will correctly handle empty arrays and merge.
                 
                 setInitialActiveOrders(fetchedOrders);
                 console.log("Loaded existing active orders and updated context:", fetchedOrders);
-                // --- END MODIFIED LOGIC ---
 
             } else {
                 console.error('Failed to fetch active orders:', response.status, response.statusText);
@@ -160,19 +158,19 @@ const MyOrderPage: React.FC = () => {
             const ordersToPatchMap: { [orderId: string]: Order } = {};
 
             // Create a mutable copy of activeOrders for processing decreases
-            //Sort activeOrders from newest to oldest before processing decreases
+            // ✅ CHANGE HERE: Sort activeOrders from OLDEST to NEWEST before processing decreases
             let mutableActiveOrdersState: Order[] = JSON.parse(JSON.stringify(activeOrders));
             mutableActiveOrdersState.sort((a,b) => {
                 const dateA = new Date(a.createdAt);
                 const dateB = new Date(b.createdAt);
-                return dateB.getTime() - dateA.getTime(); //Sort from newest to oldest
+                return dateB.getTime() - dateA.getTime(); // Sort from OLDEST to NEWEST
             })
 
 
             decreasedOrRemovedItems.forEach(async (change) => {
                 let quantityToProcess = -change.quantityChange; // This is the positive amount to reduce
 
-                // Iterate through active orders from newest to oldest
+                // Iterate through active orders from OLDEST to NEWEST
                 for (let i = 0; i < mutableActiveOrdersState.length && quantityToProcess > 0; i++) {
                     const order = mutableActiveOrdersState[i];
                     const itemInOrderIndex = order.orderItems.findIndex(oi => oi.name === change.name);
@@ -218,19 +216,19 @@ const MyOrderPage: React.FC = () => {
 
                 // NEW LOGIC: Check if the order is now empty and should be cancelled
                 if (orderToUpdate.orderItems.length === 0) {
-                    updateOrderData.status = 'cancelled'; // Set status to cancelled
+                    updateOrderData.status = 'Cancelled'; // Set status to cancelled
                     updateOrderData.totalPrice = 0; // Set total price to 0 for a cancelled order
                     console.log(`Order ${orderId} is now empty. Setting status to 'cancelled'.`);
                 }
 
-                    patchPromises.push(
-                        fetch(`${BACKEND_URL}/api/orders/${orderId}`, {
-                            method: 'PATCH',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify(updateOrderData)
-                        })
-                    );
-                }
+                patchPromises.push(
+                    fetch(`${BACKEND_URL}/api/orders/${orderId}`, {
+                        method: 'PATCH',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(updateOrderData)
+                    })
+                );
+            }
             try {
                 const results = await Promise.all(patchPromises);
                 const allPatchesSuccessful = results.every(res => res.ok);
@@ -370,12 +368,11 @@ const MyOrderPage: React.FC = () => {
                     // Disable if no additions AND no decreases/removals
                     disabled={getNewlyAddedItems().length === 0 && getDecreasedOrRemovedItems().length === 0}
                     >
-                        Confirm Order
+                    Confirm Order
                     </button>
         </div>
     );
 };
-
 
 // Styles (remain the same)
 const pageStyle: React.CSSProperties = {

@@ -261,8 +261,8 @@ export default function AdminOrdersContent() {
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                     {sortedTableGroups.map(([tableNumber, tableOrders]) => {
                         //Getting the latest order or most relevant status for the table
-                        const latestOrder = tableOrders.reduce((latest, current) => {
-                         return (new Date(current.createdAt || '').getTime() > new Date(latest.createdAt || '').getTime()) ? current : latest;
+                        const oldestOrder  = tableOrders.reduce((oldest, current) => {
+                         return (new Date(current.createdAt || '').getTime() < new Date(oldest.createdAt || '').getTime()) ? current : oldest;
                     });
                     return (
                         <div 
@@ -271,7 +271,7 @@ export default function AdminOrdersContent() {
                              >
                             <TableCard
                                 tableNumber={tableNumber}
-                                status={latestOrder.status as 'In progress' | 'Delivered' | 'Paid'}
+                                status={oldestOrder.status as 'In progress' | 'Delivered' | 'Paid'}
                                 onClick={() => handleCardClick(tableOrders)} // Trigger sidebar
                             />
 
@@ -282,25 +282,25 @@ export default function AdminOrdersContent() {
 
                             {/* Admin status buttons */}
                             <div className="space-x-2 mt-3">
-                                {latestOrder.status === 'In progress' && (
+                                {oldestOrder.status === 'In progress' && (
                                     <button
-                                        onClick={() => updateStatus(latestOrder._id, 'Delivered', tableOrders)}
+                                        onClick={() => updateStatus(oldestOrder._id, 'Delivered', tableOrders)}
                                         className="text-sm px-3 py-1 bg-yellow-300 rounded hover:bg-yellow-400 transition"
                                     >
                                         Delivered
                                     </button>
                                 )}
-                                {latestOrder.status === 'Delivered' && (
+                                {oldestOrder.status === 'Delivered' && (
                                     <button
-                                        onClick={() => updateStatus(latestOrder._id, 'Paid', tableOrders)}
+                                        onClick={() => updateStatus(oldestOrder._id, 'Paid', tableOrders)}
                                         className="text-sm px-3 py-1 bg-green-300 rounded hover:bg-green-400 transition"
                                     >
                                         Paid
                                     </button>
                                 )}
-                                {latestOrder.status === 'Paid' && (
+                                {oldestOrder.status === 'Paid' && (
                                     <button
-                                        onClick={() => archiveOrder(latestOrder._id, tableOrders)}
+                                        onClick={() => archiveOrder(oldestOrder._id, tableOrders)}
                                         className="text-sm px-3 py-1 bg-red-300 rounded hover:bg-green-400 transition"
                                     >
                                         Delete
@@ -308,9 +308,9 @@ export default function AdminOrdersContent() {
                                 )}
 
                                 {/* Revert status button */}
-                                {latestOrder.statusHistory && latestOrder.statusHistory.length > 0 && (
+                                {oldestOrder.statusHistory && oldestOrder.statusHistory.length > 0 && (
                                     <button
-                                        onClick={() => revertStatus(latestOrder._id, tableOrders)}
+                                        onClick={() => revertStatus(oldestOrder._id, tableOrders)}
                                         className="text-sm px-3 py-1 bg-blue-300 rounded hover:bg-blue-400 transition"
                                     >
                                         Revert
