@@ -56,7 +56,13 @@ export default function AdminOrdersContent() {
 
     // Function to handle card click - now handles all orders for a table
     const handleCardClick = (tableOrders: Order[]) => {
-        setSelectedOrder(tableOrders);
+        //Sort the orders for this specific table by createdAt (oldest first)
+        const sortedTableOrders = [...tableOrders].sort((a, b) => {
+            const dateA = new Date(a.createdAt);
+            const dateB = new Date(b.createdAt);
+            return dateA.getTime() - dateB.getTime(); //Sort from oldest to newest
+        });
+        setSelectedOrder(sortedTableOrders);
         setShowSidebar(true);
     }
 

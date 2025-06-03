@@ -160,12 +160,19 @@ const MyOrderPage: React.FC = () => {
             const ordersToPatchMap: { [orderId: string]: Order } = {};
 
             // Create a mutable copy of activeOrders for processing decreases
+            //Sort activeOrders from newest to oldest before processing decreases
             let mutableActiveOrdersState: Order[] = JSON.parse(JSON.stringify(activeOrders));
+            mutableActiveOrdersState.sort((a,b) => {
+                const dateA = new Date(a.createdAt);
+                const dateB = new Date(b.createdAt);
+                return dateB.getTime() - dateA.getTime(); //Sort from newest to oldest
+            })
+
 
             decreasedOrRemovedItems.forEach(async (change) => {
                 let quantityToProcess = -change.quantityChange; // This is the positive amount to reduce
 
-                // Iterate through active orders from oldest to newest
+                // Iterate through active orders from newest to oldest
                 for (let i = 0; i < mutableActiveOrdersState.length && quantityToProcess > 0; i++) {
                     const order = mutableActiveOrdersState[i];
                     const itemInOrderIndex = order.orderItems.findIndex(oi => oi.name === change.name);
