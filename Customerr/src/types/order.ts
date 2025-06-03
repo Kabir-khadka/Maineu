@@ -11,7 +11,7 @@ export interface Order {
   tableNumber: string;
   orderItems: OrderItem[];
   totalPrice: number;
-  status: 'In progress' | 'Delivered' | 'Paid' | string;
+  status: 'In progress' | 'Delivered' | 'Paid' | 'Cancelled' | string;
   statusHistory?: string[];
   createdAt: string;
   updatedAt: string;

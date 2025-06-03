@@ -45,7 +45,7 @@ router.get('/orders/table/:tableNumber/active', async (req, res) => {
         // Find all orders for this table that are NOT 'Paid'
         const activeOrders = await Order.find({
             tableNumber: tableNumber,
-            status: { $ne: 'Paid' }
+            status: { $nin: ['Paid', 'Cancelled']}
         }).sort({ createdAt: 1 }); // Sort by creation date to process oldest first if needed
 
         res.status(200).json(activeOrders);
@@ -59,7 +59,8 @@ router.get('/orders/table/:tableNumber/active', async (req, res) => {
 //This will be used when a table modifies an existing order(decrease, removal)
 router.patch('/orders/:id', async (req, res) => {
     try {
-        const { orderItems, totalPrice} = req.body;
+         // Destructure status from req.body as well
+        const { orderItems, totalPrice, status} = req.body;
 
         //orderItems can be an empty array if all items are removed from this specidic order
         if (orderItems === undefined || totalPrice === undefined) {
@@ -79,9 +80,24 @@ router.patch('/orders/:id', async (req, res) => {
         //Update order items and total price by replacing the existing arrays
         order.orderItems = orderItems;
         order.totalPrice = totalPrice;
+
+        //If a status is provided in the request body, update it
+        if (status !== undefined) {
+            // Validate the incoming status to ensure its one of the following allowed enums
+            if (!['In progress', 'Delivered', 'Paid', 'Cancelled'].includes(status)) {
+                return res.status(400).json({ error: 'Invalid status provided for update .' });
+            }
+
+            //Only push to status history if status is actually changing and its not the initial 'cancelled' state
+            if (order.status !== status) {
+                //Its good practise to push the OLD status to history before updating
+                order.statusHistory.push(order.status);
+                order.status = status;
+            }
+        }
         await order.save();
 
-        console.log('Updated order (PATCH):', order._id, orderItems);
+        console.log('Updated order (PATCH):', order._id, orderItems, 'New Status:', order.status);
         res.json(order);
     } catch (err) {
         console.erorr('Error updating order:', err);
@@ -106,7 +122,7 @@ router.get('/orders', async (req, res) => {
 router.patch('/orders/:id/status', async (req, res) => {
     const { status } = req.body;
 
-    if (!['In progress', 'Delivered', 'Paid'].includes(status)){
+    if (!['In progress', 'Delivered', 'Paid', 'Cancelled'].includes(status)){
         return res.status(400).json({ error: 'Invalid status' });
     }
 
@@ -118,8 +134,8 @@ router.patch('/orders/:id/status', async (req, res) => {
 
         //Only push if status is actually changing
         if (order.status !== status) {
-            order.statusHistory.push(order.status); //Track previous status
-            order.status =status; //Update status
+            order.statusHistory.push(order.status);//Pushing old status to history
+            order.status = status; //Update status
             await order.save();
         }
         res.json(order);
@@ -133,19 +149,30 @@ router.patch('/orders/:id/status', async (req, res) => {
 router.patch('/orders/:id/revert-status', async (req, res) => {
     try {
         const order = await Order.findById(req.params.id);
-        if (!order || order.statusHistory.length === 0) {
-            return res.status(400).json({ error: 'No status history to revert' });
+        if (!order) {
+            return res.status(404).json({ error: 'Order not found' });
+        }
+
+        if (order.statusHistory.length === 0) {
+            // If no history, and current status is not 'In progress', then it's the first state.
+            // We can't revert further.
+            return res.status(400).json({ error: 'No status history to revert further.' });
         }
 
-        const prevStatus = order.statusHistory.pop(); //Undo the last status
-        order.status = prevStatus; //Update status
-        await order.save();
+        // Pop the last status from history
+        const newStatus = order.statusHistory.pop(); 
 
-        res.json(order);
-    } catch (err) {
-        console.error('Error reverting order status:', err);
-        res.status(500).json({ error: 'Failed to revert status' });
-    }
+        // Set the current status to the popped history status
+        order.status = newStatus;
+
+        await order.save(); // Save the order with the updated status and history
+
+        console.log('Reverted order status:', order._id, 'New Status:', order.status, 'Remaining History:', order.statusHistory);
+        res.json(order);
+    } catch (err) {
+        console.error('Error reverting order status:', err);
+        res.status(500).json({ error: 'Failed to revert status' });
+    }
 });
 
 //DELETE = Delete order 
@@ -154,7 +181,7 @@ router.delete('/orders/:id/archive', async (req, res) => {
         const order = await Order.findById(req.params.id);
         if (!order) return res.status(404).json({ message: 'Order not found'});
 
-        if (order.status !== 'Paid') {
+        if (order.status !== 'Paid' && order.status !== 'Cancelled') {
             return res.status(400).json({ message: 'Only paid orders can be archived' });
         }
 
