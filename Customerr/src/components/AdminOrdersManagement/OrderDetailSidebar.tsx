@@ -140,7 +140,7 @@ export default function OrderDetailSidebar({ orders, isOpen, onClose, onOrderUpd
       </div>
 
       {/* Table Summary Footer */}
-      <div className="absolute bottom-0 left-0 right-0 p-4 bg-gray-50 border-t">
+      <div className="absolute bottom-5 left-0 right-0 p-4 bg-gray-50 border-t">
         <div className="flex justify-between items-center">
           <div className="text-sm text-gray-600">
             {orders.length} order{orders.length !== 1 ? 's' : ''} total
