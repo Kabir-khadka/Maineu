@@ -12,18 +12,20 @@ const PORT = process.env.PORT || 5000;
 
 // Middleware
 app.use(cors());
-app.use(bodyParser.json());
+app.use(express.json());
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // Import routes
 const orderRoutes = require('./routes/orderRoutes');
 const menuRoutes = require('./routes/menuRoutes');
 const categoryRoutes = require('./routes/categoryRoutes');
+const tableRoutes = require('./routes/tableRoutes');
 
 // Use routes
 app.use('/api', orderRoutes);
 app.use('/api/menu', menuRoutes);
 app.use('/api/categories', categoryRoutes);
+app.use('/api/tables', tableRoutes)
 
 // Test route
 app.get('/', (req, res) => {

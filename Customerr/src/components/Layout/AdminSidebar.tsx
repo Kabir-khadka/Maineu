@@ -8,6 +8,7 @@ const navLinks = [
     { href: '/menu-management', label: 'Menu Manager'},
     { href: '/category-management', label: 'Category Manager' },
     { href: '/adminsideorders', label: 'Orders' },
+    { href: '/table-management', label: 'Table Manager' },
     { href: '/logout', label: 'Logout' },
 
 ];
