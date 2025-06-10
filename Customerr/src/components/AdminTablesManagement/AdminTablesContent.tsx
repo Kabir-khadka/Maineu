@@ -119,7 +119,7 @@ export default function AdminTablesContent() {
         }
 
         try {
-            const res = await fetch(`{API_BASE_URL}/tables/${editingTable._id}`, {
+            const res = await fetch(`${API_BASE_URL}/tables/${editingTable._id}`, {
                 method: 'PUT', //Using PUT for full replacement or PATCH for partial upate can be used
                 headers: { 'Content-Type' : 'application/json' },
                 body: JSON.stringify({

@@ -19,7 +19,7 @@ router.get('/', async (req, res) => {
 });
 
 //GET a single table by tableNumber
-//GET /api/table/:tableNumber
+//GET /api/tables/:tableNumber
 router.get('/:tableNumber', async (req, res) => {
     try {
         const table = await Table.findOne({ tableNumber: req.params.tableNumber.toUpperCase() });
