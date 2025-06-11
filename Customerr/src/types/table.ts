@@ -14,3 +14,11 @@ export interface FetchTableResponse {
     success: boolean; //Indicates if the fetch was successfull
     data: Table; // This 'data' property holds the actual Table Object
 }
+
+export interface BulkTableActionsProps {
+    selectedTableIds: Set<string>; // Set of selected table IDs for bulk actions
+    tables: Table[]; //Pass the full tables array to get details of elected tables
+    onBulkUpdateComplete: () => void; //Callback to re-fetch tables in parent after update
+    onClearSelection: () => void; //Callback to clear selection in parent
+    onShowMessage: (message: string, isError?: boolean) => void; // Helper to display messages in parent component
+}
