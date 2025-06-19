@@ -6,6 +6,8 @@ import {Order, OrderItem} from '@/types/order';
 import OrderDetailSidebar from './OrderDetailSidebar';
 
 
+const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL;
+
 export default function AdminOrdersContent() {
     const [orders, setOrders] = useState<Order[]>([]);
     const [loading, setLoading] = useState(true);
@@ -16,7 +18,7 @@ export default function AdminOrdersContent() {
     useEffect(() => {
         const fetchOrders = async () => {
             try {
-                const res = await fetch('http://localhost:5000/api/orders');
+                const res = await fetch(`${BACKEND_URL}/api/orders`);
                 const data = await res.json();
                 setOrders(data);
             } catch (err) {
@@ -28,6 +30,44 @@ export default function AdminOrdersContent() {
 
         fetchOrders();
     }, []);
+
+    //Helper function to determine the aggregated display status for a given table based on its orders.
+    //Prioritzes 'In progress', then 'Delivered', then 'Paid', and finally 'Cancelled'.
+    const getTableDisplayStatus = (tableOrders: Order[]): 'In progress' | 'Delivered' | 'Paid' | 'Cancelled' => {
+        if (tableOrders.length === 0) {
+            return 'Cancelled';
+        }
+
+        //1. Check for 'In progress' (highest priority)
+        if (tableOrders.some(order => order.status === 'In progress')) {
+            return 'In progress';
+        }
+
+        //2. Check for 'Delivered' (next priority)
+        //Ensure no 'In progress' orders, at least one 'Delivered' order, and all others are 'Delivered', 'Paid', or 'Cancelled'.
+        const anyAreDelivered = tableOrders.some(order => order.status === 'Delivered');
+        const allOthersAreFinalOrDelivered = tableOrders.every(order => 
+            order.status === 'Delivered' || order.status === 'Paid' || order.status === 'Cancelled'
+        );
+
+        if (anyAreDelivered && allOthersAreFinalOrDelivered) {
+            return 'Delivered';
+        }
+
+        //3. Check for 'Paid' (next priority)
+        //Ensure no 'In progress' or 'Delivered' orders, at least one 'Paid' order, and all others are 'Paid' or 'Cancelled'.
+        const anyArePaid = tableOrders.some(order => order.status === 'Paid'); 
+        const allOthersArePaidOrCancelled = tableOrders.every(order =>
+            order.status === 'Paid' || order.status === 'Cancelled'
+        );
+
+        if (anyArePaid && allOthersArePaidOrCancelled) {
+            return 'Paid';
+        }
+
+        //Fallback to 'Cancelled' if none of the above
+        return 'Cancelled';
+    };
 
     // Group orders by table number
     const groupedOrders = orders.reduce((acc, order) => {
@@ -74,15 +114,18 @@ export default function AdminOrdersContent() {
 
     // ✅ Function to update order status - handles single order or all table orders
     const updateStatus = async (orderId: string, newStatus: 'Delivered' | 'Paid', tableOrders?: Order[]) => {
-        // If all orders for this table are "Delivered" and we're moving to "Paid", update all
+        // If updating multiple orders for a table (e.g., all to 'Paid')
         if (tableOrders && newStatus === 'Paid') {
-            const allDelivered = tableOrders.every(order => order.status === 'Delivered');
+            // Filter out 'Cancelled' orders from the tableOrders array before checking conditions
+            const nonCancelledTableOrders = tableOrders.filter(order => order.status !== 'Cancelled');
+
+            const allDelivered = nonCancelledTableOrders.every(order => order.status === 'Delivered');
             
-            if (allDelivered) {
-                // Update all orders for this table
+            if (allDelivered && nonCancelledTableOrders.length > 0) { // Ensure there are non-cancelled orders to update
+                // Update all NON-CANCELLED orders for this table
                 try {
-                    const updatePromises = tableOrders.map(order => 
-                        fetch(`http://localhost:5000/api/orders/${order._id}/status`, {
+                    const updatePromises = nonCancelledTableOrders.map(order => 
+                        fetch(`${BACKEND_URL}/api/orders/${order._id}/status`, { // Use BACKEND_URL
                             method: 'PATCH',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({ status: newStatus }),
@@ -112,8 +155,15 @@ export default function AdminOrdersContent() {
         }
 
         // Single order update (original logic)
+        // Ensure the single order is not 'Cancelled' before attempting to update
+        const orderToUpdate = orders.find(order => order._id === orderId);
+        if (orderToUpdate && orderToUpdate.status === 'Cancelled') {
+            console.warn(`Attempted to update a cancelled order (${orderId}). Action blocked.`);
+            return; // Block update if the specific order is cancelled
+        }
+
         try {
-            const res = await fetch(`http://localhost:5000/api/orders/${orderId}/status`, {
+            const res = await fetch(`${BACKEND_URL}/api/orders/${orderId}/status`, { // Use BACKEND_URL
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ status: newStatus }),
@@ -133,16 +183,19 @@ export default function AdminOrdersContent() {
 
     // Function to revert order statuses
     const revertStatus = async (orderId: string, tableOrders?: Order[]) => {
-        // If all orders for this table are "Delivered", revert all
+        // If reverting multiple orders for a table
         if (tableOrders) {
-            const allDelivered = tableOrders.every(order => order.status === 'Delivered');
-            const allPaid = tableOrders.every(order => order.status === 'Paid');
+            // Filter out 'Cancelled' orders from the tableOrders array before checking conditions
+            const nonCancelledTableOrders = tableOrders.filter(order => order.status !== 'Cancelled');
 
-            if (allDelivered || allPaid) {
-                // Revert all orders for this table
+            const allDelivered = nonCancelledTableOrders.every(order => order.status === 'Delivered');
+            const allPaid = nonCancelledTableOrders.every(order => order.status === 'Paid');
+
+            if ((allDelivered || allPaid) && nonCancelledTableOrders.length > 0) { // Ensure there are non-cancelled orders to revert
+                // Revert all NON-CANCELLED orders for this table
                 try {
-                    const revertPromises = tableOrders.map(order => 
-                        fetch(`http://localhost:5000/api/orders/${order._id}/revert-status`, {
+                    const revertPromises = nonCancelledTableOrders.map(order => 
+                        fetch(`${BACKEND_URL}/api/orders/${order._id}/revert-status`, { // Use BACKEND_URL
                             method: 'PATCH',
                         })
                     );
@@ -170,8 +223,15 @@ export default function AdminOrdersContent() {
         }
 
         // Single order revert (original logic)
+        // Ensure the single order is not 'Cancelled' before attempting to revert
+        const orderToRevert = orders.find(order => order._id === orderId);
+        if (orderToRevert && orderToRevert.status === 'Cancelled') {
+            console.warn(`Attempted to revert a cancelled order (${orderId}). Action blocked.`);
+            return; // Block revert if the specific order is cancelled
+        }
+
         try {
-            const res = await fetch(`http://localhost:5000/api/orders/${orderId}/revert-status`, {
+            const res = await fetch(`${BACKEND_URL}/api/orders/${orderId}/revert-status`, { // Use BACKEND_URL
                 method: 'PATCH',
             });
             if (res.ok) {
@@ -191,13 +251,16 @@ export default function AdminOrdersContent() {
         if (!confirm('Are you sure you want to archive this order?')) return;
 
         // If all orders are "Paid", archive all orders for this table
+        // We generally wouldn't archive if there are cancelled orders mixed in,
+        // unless the intent is to clear ALL orders for a table regardless of their state once all *paid* ones are paid.
+        // For now, let's keep the logic to only archive if all are paid.
         if (tableOrders) {
             const allPaid = tableOrders.every(order => order.status === 'Paid');
             
-            if (allPaid) {
+            if (allPaid) { // Only proceed if ALL orders for the table are Paid
                 try {
                     const deletePromises = tableOrders.map(order => 
-                        fetch(`http://localhost:5000/api/orders/${order._id}/archive`, {
+                        fetch(`${BACKEND_URL}/api/orders/${order._id}/archive`, { // Use BACKEND_URL
                             method: 'DELETE',
                         })
                     );
@@ -221,7 +284,7 @@ export default function AdminOrdersContent() {
 
         // Single order archive (fallback)
         try {
-            const res = await fetch(`http://localhost:5000/api/orders/${orderId}/archive`, {
+            const res = await fetch(`${BACKEND_URL}/api/orders/${orderId}/archive`, { // Use BACKEND_URL
                 method: 'DELETE',
             });
 
@@ -235,7 +298,7 @@ export default function AdminOrdersContent() {
         }
     };
 
-    // ✅ Callback function to handle order updates from sidebar
+    // Callback function to handle order updates from sidebar
     const handleOrderUpdate = (updatedOrder: Order) => {
         setOrders((prev) =>
             prev.map((order) => (order._id === updatedOrder._id ? updatedOrder : order))
@@ -260,75 +323,84 @@ export default function AdminOrdersContent() {
             ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                     {sortedTableGroups.map(([tableNumber, tableOrders]) => {
-                        //Getting the latest order or most relevant status for the table
-                        const oldestOrder  = tableOrders.reduce((oldest, current) => {
-                         return (new Date(current.createdAt || '').getTime() < new Date(oldest.createdAt || '').getTime()) ? current : oldest;
-                    });
-                    return (
-                        <div 
-                             key={tableNumber} 
-                             className="bg-white shadow-md rounded-xl p-4 border border-gray-200"
-                             >
-                            <TableCard
-                                tableNumber={tableNumber}
-                                status={oldestOrder.status as 'In progress' | 'Delivered' | 'Paid'}
-                                onClick={() => handleCardClick(tableOrders)} // Trigger sidebar
-                            />
+                        // Getting the latest order or most relevant status for the table
+                        // IMPORTANT: The 'oldestOrder' here is used for button logic, not for the TableCard's overall status.
+                        // It's primarily used for passing an orderId to the update/revert functions,
+                        // and its status for initial button display checks.
+                        const oldestOrder = tableOrders.reduce((oldest, current) => {
+                           return (new Date(current.createdAt || '').getTime() < new Date(oldest.createdAt || '').getTime()) ? current : oldest;
+                        });
 
-                            {/* Show order count for this table */}
+                        const displayStatus = getTableDisplayStatus(tableOrders); 
+
+                        return (
+                            <div 
+                                key={tableNumber} 
+                                className="bg-white shadow-md rounded-xl p-4 border border-gray-200"
+                            >
+                                <TableCard
+                                    tableNumber={tableNumber}
+                                    status={displayStatus} 
+                                    onClick={() => handleCardClick(tableOrders)} // Trigger sidebar
+                                />
+
+                                {/* Show order count for this table */}
                                 <div className="mt-2 text-sm text-gray-600 text-center">
                                     {tableOrders.length} order{tableOrders.length !== 1 ? 's' : ''}
                                 </div>
 
-                            {/* Admin status buttons */}
-                            <div className="space-x-2 mt-3">
-                                {oldestOrder.status === 'In progress' && (
-                                    <button
-                                        onClick={() => updateStatus(oldestOrder._id, 'Delivered', tableOrders)}
-                                        className="text-sm px-3 py-1 bg-yellow-300 rounded hover:bg-yellow-400 transition"
-                                    >
-                                        Delivered
-                                    </button>
-                                )}
-                                {oldestOrder.status === 'Delivered' && (
-                                    <button
-                                        onClick={() => updateStatus(oldestOrder._id, 'Paid', tableOrders)}
-                                        className="text-sm px-3 py-1 bg-green-300 rounded hover:bg-green-400 transition"
-                                    >
-                                        Paid
-                                    </button>
-                                )}
-                                {oldestOrder.status === 'Paid' && (
-                                    <button
-                                        onClick={() => archiveOrder(oldestOrder._id, tableOrders)}
-                                        className="text-sm px-3 py-1 bg-red-300 rounded hover:bg-green-400 transition"
-                                    >
-                                        Delete
-                                    </button>
-                                )}
+                                {/* Admin status buttons */}
+                                <div className="space-x-2 mt-3">
+                                    {/* Only show 'Delivered' button if the aggregated displayStatus is 'In progress' */}
+                                    {displayStatus === 'In progress' && (
+                                        <button
+                                            onClick={() => updateStatus(oldestOrder._id, 'Delivered', tableOrders)}
+                                            className="text-sm px-3 py-1 bg-yellow-300 rounded hover:bg-yellow-400 transition"
+                                        >
+                                            Delivered
+                                        </button>
+                                    )}
+                                    {/* Only show 'Paid' button if the aggregated displayStatus is 'Delivered' */}
+                                    {displayStatus === 'Delivered' && (
+                                        <button
+                                            onClick={() => updateStatus(oldestOrder._id, 'Paid', tableOrders)}
+                                            className="text-sm px-3 py-1 bg-green-300 rounded hover:bg-green-400 transition"
+                                        >
+                                            Paid
+                                        </button>
+                                    )}
+                                    {/* Only show 'Delete' (Archive) button if the aggregated displayStatus is 'Paid' */}
+                                    {displayStatus === 'Paid' && (
+                                        <button
+                                            onClick={() => archiveOrder(oldestOrder._id, tableOrders)}
+                                            className="text-sm px-3 py-1 bg-red-300 rounded hover:bg-green-400 transition"
+                                        >
+                                            Delete
+                                        </button>
+                                    )}
 
-                                {/* Revert status button */}
-                                {oldestOrder.statusHistory && oldestOrder.statusHistory.length > 0 && (
-                                    <button
-                                        onClick={() => revertStatus(oldestOrder._id, tableOrders)}
-                                        className="text-sm px-3 py-1 bg-blue-300 rounded hover:bg-blue-400 transition"
-                                    >
-                                        Revert
-                                    </button>
-                                )}
+                                    {/* Revert status button - only show if there's history and the current displayStatus is NOT 'Cancelled' */}
+                                    {displayStatus !== 'Cancelled' && oldestOrder.statusHistory && oldestOrder.statusHistory.length > 0 && (
+                                        <button
+                                            onClick={() => revertStatus(oldestOrder._id, tableOrders)}
+                                            className="text-sm px-3 py-1 bg-blue-300 rounded hover:bg-blue-400 transition"
+                                        >
+                                            Revert
+                                        </button>
+                                    )}
+                                </div>
                             </div>
-                        </div>
-                       );
-                     })}
+                        );
+                    })}
                 </div>
             )}
 
             {/*Sidebar Integration with callback*/}
             <OrderDetailSidebar
-               orders={selectedOrders}
-               isOpen={showSidebar}
-               onClose={handleCloseSidebar}
-               onOrderUpdate={handleOrderUpdate}
+                orders={selectedOrders}
+                isOpen={showSidebar}
+                onClose={handleCloseSidebar}
+                onOrderUpdate={handleOrderUpdate}
             />
         </div>
     );

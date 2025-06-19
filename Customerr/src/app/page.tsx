@@ -17,27 +17,37 @@ const [tableNumber, setTableNumber] = useState<string>(''); // Table Number Stat
 const searchParams = useSearchParams(); // Get search parameters from the URL
 const [qrCodeIdentifier, setQrCodeIdentifier] = useState<string | null>(null); // State for QR code identifier
 
-//UseEffect to get the QR code identifier from the URL
+//UseEffect to prioritize sessionStorage for table number and QR ID
 useEffect(() => {
-  const qr = searchParams.get('qr');
-  if (qr) {
-    setQrCodeIdentifier(qr);
-    console.log('Extracted QR Code Identifer:', qr);
+  const storedQr = sessionStorage.getItem('qrCodeIdentifier');
+  const storedTable = sessionStorage.getItem('tableNumber');
+  if (storedQr && storedTable) {
+    setQrCodeIdentifier(storedQr);
+    setTableNumber(storedTable);
+    console.log('Loaded QR Code and Table Number from sessionStorage:', storedQr, storedTable);
     //Instead of immediately setting a random table number or stored one,
     //we will now fetch the actual table number based on this QR ID
   } else {
+    //If not in session storage, check the URL search parameters
+    const qrFromUrl = searchParams.get('qr');
+    if (qrFromUrl) {
+      setQrCodeIdentifier(qrFromUrl);
+      console.log('Extended QR Code Identifier from URL:', qrFromUrl);
+    } else {
     // If no QR code identifier in URL, this might be a direct visit or fallback
     //For now, if no QR, we default to "N/A" or "Unknown".
     // You could also redirect them to a page to scan a QR.
     setTableNumber('N/A');
+    setQrCodeIdentifier(null); // Ensuring qrCodeIdentifier is null if no valid source
     console.warn('No QR code identifier found in URL. Displaying N/A.');
+   }
   }
 }, [searchParams]); // Re-run if searchParams change
 
 //useEffect to fetch the actual table number from the backend using the QR ID
 useEffect(() =>{
   const fetchTableNumber = async () => {
-    if (!qrCodeIdentifier) {
+    if (!qrCodeIdentifier || tableNumber !== '') {
       return; // Dont fetch if no QR code identifier is available yet
     }
 
@@ -80,7 +90,7 @@ useEffect(() =>{
     }
   };
   fetchTableNumber(); 
-}, [qrCodeIdentifier]); // Re-run this effect when qrCodeIdentifier changes
+}, [qrCodeIdentifier, tableNumber]); // Re-run this effect when qrCodeIdentifier changes
 
   return (
     <div style={containerStyle}>

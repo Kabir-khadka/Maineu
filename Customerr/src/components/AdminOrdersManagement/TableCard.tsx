@@ -4,7 +4,7 @@ import { Order, OrderItem } from '@/types/order';
 
 interface TableCardProps {
     tableNumber: string;
-    status: 'In progress' | 'Delivered' | 'Paid';
+    status: 'In progress' | 'Delivered' | 'Paid' | 'Cancelled';
     onClick: () => void;
 }
 
@@ -14,7 +14,9 @@ export default function TableCard({ tableNumber, status, onClick }: TableCardPro
         ? 'bg-green-100'
         : status === 'Delivered'
         ? 'bg-yellow-100'
-        : 'bg-red-100';
+        : status === 'In progress'
+        ? 'bg-red-100'
+        : 'bg-gray-300'; //Default for Cancelled
 
     return (
         <div
