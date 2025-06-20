@@ -111,7 +111,7 @@ const MyOrderPage: React.FC = () => {
         }
 
         let changesSuccessful = false;
-        let finalNavigationPath = '/payment'; // Default navigation path
+        let finalNavigationPath = '/addeditcustomerside'; // Default navigation path
 
         // --- PART 1: Handle Additions/Increases (always POST as new order) ---
         if (newlyAddedItems.length > 0) {
