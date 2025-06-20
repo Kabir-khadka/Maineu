@@ -22,6 +22,7 @@ useEffect(() => {
   const storedQr = sessionStorage.getItem('qrCodeIdentifier');
   const storedTable = sessionStorage.getItem('tableNumber');
   if (storedQr && storedTable) {
+    // Found it! Use them immediately
     setQrCodeIdentifier(storedQr);
     setTableNumber(storedTable);
     console.log('Loaded QR Code and Table Number from sessionStorage:', storedQr, storedTable);
