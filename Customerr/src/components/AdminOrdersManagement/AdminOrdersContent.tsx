@@ -351,15 +351,6 @@ export default function AdminOrdersContent() {
 
                                 {/* Admin status buttons */}
                                 <div className="space-x-2 mt-3">
-                                    {/* Only show 'Delivered' button if the aggregated displayStatus is 'In progress' */}
-                                    {displayStatus === 'In progress' && (
-                                        <button
-                                            onClick={() => updateStatus(oldestOrder._id, 'Delivered', tableOrders)}
-                                            className="text-sm px-3 py-1 bg-yellow-300 rounded hover:bg-yellow-400 transition"
-                                        >
-                                            Delivered
-                                        </button>
-                                    )}
                                     {/* Only show 'Paid' button if the aggregated displayStatus is 'Delivered' */}
                                     {displayStatus === 'Delivered' && (
                                         <button

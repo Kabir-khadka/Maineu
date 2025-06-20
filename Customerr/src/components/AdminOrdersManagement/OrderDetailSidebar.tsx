@@ -83,38 +83,25 @@ export default function OrderDetailSidebar({ orders, isOpen, onClose, onOrderUpd
               </div>
               
               {/* Status Display/Button Logic */}
-              {orderIndex === 0 ? (
-                // Order #1 - Regular status display (controlled by AdminOrdersContent)
+              {/* This logic now applies to ALL orders (not just #2 and beyond) */}
+              {order.status === 'In progress' ? (
+                <button
+                   onClick={() => updateIndividualOrderStatus(order._id)}
+                   className="text-xs px-3 py-1 bg-orange-200 text-orange-800 rounded-full hover:bg-orange-300 transition cursor-pointer border border-orange-300"
+                >
+                  In progress → Deliver
+                </button>
+              ) : (
+                // Show Regular status badge if already delivered or paid 
                 <div className={`text-xs px-2 py-1 rounded-full ${
-                  order.status === 'In progress' 
-                    ? 'bg-orange-100 text-orange-800' 
-                    : order.status === 'Delivered' 
+                   order.status === 'Delivered' 
                     ? 'bg-yellow-100 text-yellow-800'
                     : 'bg-green-100 text-green-800'
                 }`}>
                   {order.status}
                 </div>
-              ) : (
-                // Orders #2 and beyond - Clickable button if "In progress"
-                order.status === 'In progress' ? (
-                  <button
-                    onClick={() => updateIndividualOrderStatus(order._id)}
-                    className="text-xs px-3 py-1 bg-orange-200 text-orange-800 rounded-full hover:bg-orange-300 transition cursor-pointer border border-orange-300"
-                  >
-                    In progress → Deliver
-                  </button>
-                ) : (
-                  // Show regular status badge if already delivered
-                  <div className={`text-xs px-2 py-1 rounded-full ${
-                    order.status === 'Delivered' 
-                      ? 'bg-yellow-100 text-yellow-800'
-                      : 'bg-green-100 text-green-800'
-                  }`}>
-                    {order.status}
-                  </div>
-                )
               )}
-            </div>
+              </div>
 
             {/* Order Time */}
             <div className="text-sm text-gray-500 mb-3">
