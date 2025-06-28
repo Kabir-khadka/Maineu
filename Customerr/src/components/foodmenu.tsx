@@ -1,6 +1,6 @@
 'use client';
 
-import React, { use, useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { useOrder } from '@/app/context/OrderContext';
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL;
@@ -15,33 +15,34 @@ interface MenuItem {
 }
 
 interface MenuItemWithQuantity extends MenuItem {
+  // This quantity is now solely for tracking new additions made *within this FoodMenu session*.
+  // It resets to 0 whenever the FoodMenu loads/reloads or a category changes.
   quantity: number;
 }
 
 const FoodMenu = () => {
-  const { addOrderItem } = useOrder();
+  const { increaseItemQuantity, decreaseItemQuantity } = useOrder();
   const [activeButton, setActiveButton] = useState<string | null>(null);
   const [menuItems, setMenuItems] = useState<MenuItemWithQuantity[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [categories, setCategories] = useState<string[]>([]);
 
-  // Fecth categories from the server
+  // Fetch categories from the server
   const fetchCategories = async () => {
     try {
       const res = await fetch(`${BACKEND_URL}/api/menu/categories/all`);
-        if (!res.ok) throw new Error('Failed to fetch categories');
-        const categoryNames: string[] = await res.json();
-        setCategories(categoryNames);
-        // Automatically activate the first category
-    if (categoryNames.length > 0) {
-      setActiveButton(prev => prev || categoryNames[0]);
+      if (!res.ok) throw new Error('Failed to fetch categories');
+      const categoryNames: string[] = await res.json();
+      setCategories(categoryNames);
+      if (categoryNames.length > 0) {
+        setActiveButton(prev => prev || categoryNames[0]);
+      }
+    } catch (err) {
+      console.error(err);
+      setError('Failed to load categories');
     }
-  } catch (err) {
-    console.error(err);
-    setError('Failed to load categories');
-  }
-};
+  };
 
   const fetchMenuItems = async (category: string) => {
     setIsLoading(true);
@@ -50,10 +51,10 @@ const FoodMenu = () => {
       const res = await fetch(`${BACKEND_URL}/api/menu?category=${category}`);
       if (!res.ok) throw new Error('Failed to fetch');
       const data: MenuItem[] = await res.json();
-      // Add quantity field to each item
+      // Crucially, always initialize quantities to 0 for the FoodMenu display
       const itemsWithQuantity: MenuItemWithQuantity[] = data.map(item => ({
         ...item,
-        quantity: 0,
+        quantity: 0, // This is exactly what you want: always start at 0 here
       }));
       setMenuItems(itemsWithQuantity);
     } catch (err) {
@@ -77,57 +78,58 @@ const FoodMenu = () => {
     setActiveButton(category);
   };
 
-  const increaseQuantity = (item: MenuItemWithQuantity) => {
-    const updatedItems = menuItems.map((menuItem) =>
-      menuItem._id === item._id
-    ? { ...menuItem, quantity: menuItem.quantity + 1 }
-    : menuItem
-  );
-  setMenuItems(updatedItems);
-
-  console.log("=== FoodMenu increaseQuantity ===");
-    console.log("Adding item to order:", {
-        name: item.name,
-        quantity: item.quantity + 1,
-        price: item.price,
+  // --- FIXED QUANTITY HANDLERS WITH useCallback ---
+  const handleIncreaseQuantity = useCallback((item: MenuItemWithQuantity) => {
+    console.log('handleIncreaseQuantity called for:', item.name);
+    
+    // Update local state first
+    setMenuItems(prevItems => {
+      return prevItems.map(menuItem => {
+        if (menuItem._id === item._id) {
+          const newLocalQuantity = menuItem.quantity + 1;
+          return { ...menuItem, quantity: newLocalQuantity };
+        }
+        return menuItem;
+      });
     });
-  addOrderItem({
-    name: item.name,
-    quantity: item.quantity + 1,
-    price: item.price,
-  });
-  };
 
-  const decreaseQuantity = (item : MenuItemWithQuantity) => {
-    if (item.quantity > 0) {
-      const updatedItems = menuItems.map((menuItem) => 
-        menuItem._id == item._id
-          ? { ...menuItem, quantity: Math.max(0, menuItem.quantity - 1)}
-           : menuItem
-        );
-        setMenuItems(updatedItems);
-        addOrderItem({
-          name: item.name,
-          quantity: Math.max(0, item.quantity - 1),
-          price: item.price,
-        });
-    }
-  };
+    // Then update the OrderContext
+    increaseItemQuantity(item.name, item.price);
+  }, [increaseItemQuantity]);
+
+  const handleDecreaseQuantity = useCallback((item: MenuItemWithQuantity) => {
+    console.log('handleDecreaseQuantity called for:', item.name);
+    
+    // Update local state first
+    setMenuItems(prevItems => {
+      return prevItems.map(menuItem => {
+        if (menuItem._id === item._id && menuItem.quantity > 0) {
+          const newLocalQuantity = menuItem.quantity - 1;
+          return { ...menuItem, quantity: newLocalQuantity };
+        }
+        return menuItem;
+      });
+    });
+
+    // Then update the OrderContext
+    decreaseItemQuantity(item.name);
+  }, [decreaseItemQuantity]);
+  // --- END FIXED QUANTITY HANDLERS ---
 
   return (
     <div style={styles.container}>
       {/* Category Buttons */}
       <div style={styles.buttonGrid}>
-        {categories.map((item) => (
+        {categories.map((cat) => (
           <button
-            key={item}
-            onClick={() => handleButtonClick(item)}
+            key={cat}
+            onClick={() => handleButtonClick(cat)}
             style={{
               ...styles.button,
-              ...(activeButton === item ? styles.activeButton : {}),
+              ...(activeButton === cat ? styles.activeButton : {}),
             }}
           >
-            <span style={styles.text}>{item}</span>
+            <span style={styles.text}>{cat}</span>
           </button>
         ))}
       </div>
@@ -161,9 +163,25 @@ const FoodMenu = () => {
                   {item.available ? 'Available' : 'Unavailable'}
                 </p>
                 <div style={styles.quantityControls}>
-                  <button onClick={() => decreaseQuantity(item)}>-</button>
-                  <span>{item.quantity}</span>
-                  <button onClick={() => increaseQuantity(item)}>+</button>
+                  <button 
+                    onClick={() => handleDecreaseQuantity(item)}
+                    disabled={item.quantity === 0}
+                    style={{
+                      ...styles.quantityButton,
+                      opacity: item.quantity === 0 ? 0.5 : 1,
+                      cursor: item.quantity === 0 ? 'not-allowed' : 'pointer'
+                    }}
+                  >
+                    -
+                  </button>
+                  {/* This quantity is now purely the local count for this FoodMenu session */}
+                  <span style={styles.quantityDisplay}>{item.quantity}</span>
+                  <button 
+                    onClick={() => handleIncreaseQuantity(item)}
+                    style={styles.quantityButton}
+                  >
+                    +
+                  </button>
                 </div>
               </div>
             </div>
