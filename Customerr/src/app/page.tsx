@@ -19,8 +19,8 @@ const [qrCodeIdentifier, setQrCodeIdentifier] = useState<string | null>(null); /
 
 //UseEffect to prioritize sessionStorage for table number and QR ID
 useEffect(() => {
-  const storedQr = sessionStorage.getItem('qrCodeIdentifier');
-  const storedTable = sessionStorage.getItem('tableNumber');
+  const storedQr = localStorage.getItem('qrCodeIdentifier');
+  const storedTable = localStorage.getItem('tableNumber');
   if (storedQr && storedTable) {
     // Found it! Use them immediately
     setQrCodeIdentifier(storedQr);
@@ -76,8 +76,8 @@ useEffect(() =>{
       if (data && data.data && data.data.tableNumber) {
       setTableNumber(data.data.tableNumber); // Set the actual tableNumber
         //Store the actual table number in session storage for persistence
-      sessionStorage.setItem('tableNumber', data.data.tableNumber);
-      sessionStorage.setItem('qrCodeIdentifier', qrCodeIdentifier); // Also storing QR ID
+      localStorage.setItem('tableNumber', data.data.tableNumber);
+      localStorage.setItem('qrCodeIdentifier', qrCodeIdentifier); // Also storing QR ID
 
       } else {
         console.warn('Fetched data is missing tableNumber:', data); // <--- CHECK THIS LOG!

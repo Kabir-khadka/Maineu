@@ -5,6 +5,31 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Custom Scrollbar styles (For WebKit browsers (Chrome, Sfari, Edge) */
+.order-items-scrollable::-webkit-scrollbar {
+  width: 8px; /* Width of the vertical scrollbar */
+}
+
+.order-items-scrollable::-webkit-scrollbar-track {
+  background: #f1f1f1; /* Color of the scrollbar track */
+  border-radius: 10px;
+}
+
+.order-items-scrollable::-webkit-scrollbar-thumb {
+  background: #888; /* Color of the scrollbar thumb */
+  border-radius: 10px;
+}
+
+.order-items-scrollable::-webkit-scrollbar-thumb:hover {
+  background: #555;
+}
+
+/* For Firefox */
+.order-items-scrollable {
+  scrollbar-width: thin; /* "auto" or "none" or "thin" */
+  scrollbar-color: #888 #f1f1f1;
+}
+
 body {
   font-family: 'Montserrat', Arial, Helvetica, sans-serif;
 }

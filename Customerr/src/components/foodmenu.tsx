@@ -178,6 +178,7 @@ const FoodMenu = () => {
 const styles: { [key: string]: React.CSSProperties } = {
   container: {
     display: 'flex',
+    backgroundColor: '#fdd7a2',
     flexDirection: 'column',
     alignItems: 'center',
     padding: '10px',
