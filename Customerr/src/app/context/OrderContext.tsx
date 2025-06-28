@@ -6,7 +6,7 @@ interface OrderContextType {
     orderItems: OrderItem[]; // Current state of the customer's cart
     activeOrders: Order[]; // All active orders loaded from the backend for this table
     addOrderItem: (item: OrderItem) => void;
-    increaseItemQuantity: (name: string) => void;
+    increaseItemQuantity: (name: string, price?: number) => void; // Added price parameter
     decreaseItemQuantity: (name: string) => void;
     getNewlyAddedItems: () => OrderItem[];
     getDecreasedOrRemovedItems: () => { name: string; quantityChange: number; price: number; }[];
@@ -65,24 +65,27 @@ export const OrderProvider: React.FC<{children: React.ReactNode}> = ({ children 
         return Object.values(aggregated);
     }, [activeOrders]);
 
+    // This function is now more for specific quantity additions, not for +1 increments
+    // FoodMenu will mostly use increaseItemQuantity
     const addOrderItem = useCallback((item: OrderItem) => {
         console.log("OrderContext: addOrderItem called with item:", item);
         setOrderItems(prevItems => {
-            console.log("OrderContext: addOrderItem - prevItems before update:", prevItems);
             const existingIndex = prevItems.findIndex(i => i.name === item.name);
             let updatedItems;
 
-            if (item.quantity === 0) {
+            if (item.quantity === 0) { // If adding with 0 quantity, remove it
                 updatedItems = prevItems.filter(i => i.name !== item.name);
                 console.log(`OrderContext: addOrderItem - Removing item ${item.name}. New state:`, updatedItems);
             } else if (existingIndex > -1) {
+                // If it exists, add the new quantity to the existing one
                 updatedItems = [...prevItems];
                 updatedItems[existingIndex] = {
-                    ...updatedItems[existingIndex], // Keep existing properties (price, etc)
+                    ...updatedItems[existingIndex],
                     quantity: updatedItems[existingIndex].quantity + item.quantity
                 }
                 console.log(`OrderContext: addOrderItem - Updating item ${item.name}. New state:`, updatedItems);
             } else {
+                // If it's new, just add it
                 updatedItems = [...prevItems, item];
                 console.log(`OrderContext: addOrderItem - Adding new item ${item.name}. New state:`, updatedItems);
             }
@@ -90,16 +93,32 @@ export const OrderProvider: React.FC<{children: React.ReactNode}> = ({ children 
         });
     }, []);
 
-    const increaseItemQuantity = useCallback((name: string) => {
-        console.log("OrderContext: increaseItemQuantity called for:", name);
+    // UPDATED: Now handles new items as well
+    const increaseItemQuantity = useCallback((name: string, price?: number) => {
+        console.log("OrderContext: increaseItemQuantity called for:", name, "with price:", price);
         setOrderItems(prevItems => {
-            const updatedItems = prevItems.map(item =>
-                item.name === name
-                ? {...item, quantity: item.quantity + 1}
-                : item
-            );
-            console.log("OrderContext: increaseItemQuantity - New state:", updatedItems);
-            return updatedItems;
+            const existingIndex = prevItems.findIndex(item => item.name === name);
+            
+            if (existingIndex > -1) {
+                // Item exists, increase quantity
+                const updatedItems = prevItems.map(item =>
+                    item.name === name
+                    ? {...item, quantity: item.quantity + 1}
+                    : item
+                );
+                console.log("OrderContext: increaseItemQuantity - Existing item updated:", updatedItems);
+                return updatedItems;
+            } else {
+                // Item doesn't exist, add it with quantity 1
+                if (!price) {
+                    console.error("Price is required when adding new item via increaseItemQuantity");
+                    return prevItems;
+                }
+                const newItem = { name, quantity: 1, price };
+                const updatedItems = [...prevItems, newItem];
+                console.log("OrderContext: increaseItemQuantity - New item added:", updatedItems);
+                return updatedItems;
+            }
         });
     }, []);
 

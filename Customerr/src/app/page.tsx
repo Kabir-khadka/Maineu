@@ -16,24 +16,26 @@ export default function HomePage() {
 const [tableNumber, setTableNumber] = useState<string>(''); // Table Number State
 const searchParams = useSearchParams(); // Get search parameters from the URL
 const [qrCodeIdentifier, setQrCodeIdentifier] = useState<string | null>(null); // State for QR code identifier
+const [isLoading, setIsLoading] = useState(false);
 
-//UseEffect to prioritize sessionStorage for table number and QR ID
+//UseEffect to prioritize sessionStorage for qrCodeIdentifier from URL or localStorage
 useEffect(() => {
   const storedQr = localStorage.getItem('qrCodeIdentifier');
   const storedTable = localStorage.getItem('tableNumber');
-  if (storedQr && storedTable) {
+  //If not in local storage, check the URL search parameters
+    const qrFromUrl = searchParams.get('qr');
+    if (qrFromUrl) {
+      setQrCodeIdentifier(qrFromUrl);
+      console.log('Extended QR Code Identifier from URL:', qrFromUrl);
+  
+  } else if (storedQr && storedTable) {
     // Found it! Use them immediately
     setQrCodeIdentifier(storedQr);
     setTableNumber(storedTable);
     console.log('Loaded QR Code and Table Number from sessionStorage:', storedQr, storedTable);
     //Instead of immediately setting a random table number or stored one,
-    //we will now fetch the actual table number based on this QR ID
-  } else {
-    //If not in session storage, check the URL search parameters
-    const qrFromUrl = searchParams.get('qr');
-    if (qrFromUrl) {
-      setQrCodeIdentifier(qrFromUrl);
-      console.log('Extended QR Code Identifier from URL:', qrFromUrl);
+    //we will now fetch the actual table number based on this QR ID {
+    
     } else {
     // If no QR code identifier in URL, this might be a direct visit or fallback
     //For now, if no QR, we default to "N/A" or "Unknown".
@@ -42,56 +44,71 @@ useEffect(() => {
     setQrCodeIdentifier(null); // Ensuring qrCodeIdentifier is null if no valid source
     console.warn('No QR code identifier found in URL. Displaying N/A.');
    }
-  }
 }, [searchParams]); // Re-run if searchParams change
 
 //useEffect to fetch the actual table number from the backend using the QR ID
-useEffect(() =>{
-  const fetchTableNumber = async () => {
-    if (!qrCodeIdentifier || tableNumber !== '') {
-      return; // Dont fetch if no QR code identifier is available yet
-    }
-
-    console.log(`Attempting to fetch table for QR ID: ${qrCodeIdentifier}`);
-    console.log(`API URL: ${API_BASE_URL}/tables/qr/${qrCodeIdentifier}`);
-
-
-    try {
-      // Fetch table details using the qrCodeIdentifier
-      //Asssuming your backend has an endpoint like /api/tables/byQR/:qrCodeIdentifier
-      const res = await fetch(`${API_BASE_URL}/tables/qr/${qrCodeIdentifier}`);
-
-      console.log('Response status:', res.status);
-
-      if (!res.ok) {
-        const errorData = await res.json();
-        throw new Error(errorData.message || 'Failed to fetch table details.');
+useEffect(() => {
+    const fetchTableNumber = async () => {
+      if (!qrCodeIdentifier) { // Only fetch if qrCodeIdentifier is available
+        setIsLoading(false); // If no QR, nothing to load
+        return;
       }
-      
-      // Cast the incoming JSON to the FecthTableResponse type
-      const data: FetchTableResponse = await res.json();
-      
-      console.log('Fetched table data:', data);
-      // Check if the data contains the expected tableNumber
-      if (data && data.data && data.data.tableNumber) {
-      setTableNumber(data.data.tableNumber); // Set the actual tableNumber
-        //Store the actual table number in session storage for persistence
-      localStorage.setItem('tableNumber', data.data.tableNumber);
-      localStorage.setItem('qrCodeIdentifier', qrCodeIdentifier); // Also storing QR ID
 
-      } else {
-        console.warn('Fetched data is missing tableNumber:', data); // <--- CHECK THIS LOG!
-        setTableNumber('Table Not Found');
+      // Reset tableNumber and set loading to true whenever qrCodeIdentifier triggers a new fetch
+      setTableNumber('Fetching...'); // Show immediate feedback that it's loading
+      setIsLoading(true);
+
+      console.log(`HomePage: Attempting to fetch table for QR ID: ${qrCodeIdentifier}`);
+      console.log(`HomePage: API URL: ${API_BASE_URL}/tables/qr/${qrCodeIdentifier}`);
+
+      try {
+        const res = await fetch(`${API_BASE_URL}/tables/qr/${qrCodeIdentifier}`);
+        console.log('HomePage: Response status:', res.status);
+
+        if (!res.ok) {
+          // If the QR is not found or other backend error, set a clear message
+          const errorData = await res.json();
+          throw new Error(errorData.message || 'Failed to fetch table details.');
+        }
+
+        const data: FetchTableResponse = await res.json();
+        console.log('HomePage: Fetched table data:', data);
+
+        if (data && data.data && data.data.tableNumber) {
+          const fetchedTableNum = data.data.tableNumber;
+          setTableNumber(fetchedTableNum); // Set the actual tableNumber for display
+          // Store the newly fetched table number and QR ID in localStorage
+          localStorage.setItem('tableNumber', fetchedTableNum);
+          localStorage.setItem('qrCodeIdentifier', qrCodeIdentifier);
+          console.log(`HomePage: Successfully fetched and set tableNumber: ${fetchedTableNum}`);
+        } else {
+          console.warn('HomePage: Fetched data is missing tableNumber:', data);
+          setTableNumber('Table Not Found');
+          // Clear localStorage if the QR somehow led to invalid data
+          localStorage.removeItem('tableNumber');
+          localStorage.removeItem('qrCodeIdentifier');
+        }
+      } catch (error: any) {
+        console.error('HomePage: Error fetching table details:', error);
+        setTableNumber(`Error: ${error.message}`); // Indicate an error in the UI
+        localStorage.removeItem('tableNumber'); // Clear invalid stored data
+        localStorage.removeItem('qrCodeIdentifier');
+      } finally {
+        setIsLoading(false); // Always set loading to false after the fetch attempt
       }
-    } catch (error: any){
-      console.error('Error fetching table details:', error);
-      setTableNumber(`Error: ${error.message}`); //Indicate an error in the UI
-      //Optionalyy, display a user firendly error message or redirect
+    };
 
-    }
-  };
-  fetchTableNumber(); 
-}, [qrCodeIdentifier, tableNumber]); // Re-run this effect when qrCodeIdentifier changes
+    fetchTableNumber();
+  }, [qrCodeIdentifier]); // This effect ONLY depends on qrCodeIdentifier
+
+  // Render loading state for the whole page
+  if (isLoading) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-screen bg-[#fdd7a2]">
+        <p className="text-xl text-gray-800">Loading table details...</p>
+      </div>
+    );
+  }
 
   return (
     <div style={containerStyle}>
