@@ -77,7 +77,10 @@ export const OrderProvider: React.FC<{children: React.ReactNode}> = ({ children 
                 console.log(`OrderContext: addOrderItem - Removing item ${item.name}. New state:`, updatedItems);
             } else if (existingIndex > -1) {
                 updatedItems = [...prevItems];
-                updatedItems[existingIndex] = item; // Update the whole item
+                updatedItems[existingIndex] = {
+                    ...updatedItems[existingIndex], // Keep existing properties (price, etc)
+                    quantity: updatedItems[existingIndex].quantity + item.quantity
+                }
                 console.log(`OrderContext: addOrderItem - Updating item ${item.name}. New state:`, updatedItems);
             } else {
                 updatedItems = [...prevItems, item];

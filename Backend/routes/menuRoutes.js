@@ -4,19 +4,6 @@ const MenuItem = require('../models/MenuItem');
 const upload = require('../middlewares/upload'); // Assuming you have a middleware for handling file uploads
 const Category = require('../models/Category'); // Import the Category model
 
-//Predefined categories list
-const predefinedCategories = [
-    "Food",
-    "Momos",
-    "Noodles",
-    "Pizza",
-    "Drinks",
-    "Snacks",
-    "Thali",
-    "Desserts",
-    "Ice Cream"
-];
-
 //Create a new Item
 router.post('/', upload.single('image'), async (req, res) => {
     try {

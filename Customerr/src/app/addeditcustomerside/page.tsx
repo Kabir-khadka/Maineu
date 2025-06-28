@@ -1,4 +1,4 @@
-//src/app/AddEditCuatomerside/page.tsx
+//src/app/AddEditCustomerside/page.tsx
 
 import React from "react";
 import AddEditContent from "@/components/AddEditManagement/AddEditContent";
