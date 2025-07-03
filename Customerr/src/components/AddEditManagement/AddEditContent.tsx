@@ -283,6 +283,11 @@ export default function AddEditContent () {
         setIsFoodMenuOpen(false); //Close the bottom sheet
     };
 
+    //Function for Payment page
+    const handleMoveTowardsPayment = () => {
+        router.push('/payment'); // Navigate to the /payment route
+    }
+
     //Derived state to check if there are any pending changes to confirm
     //This will cause the Confirm Order button to appear/disappear
     const hasPendingChanges = getNewlyAddedItems().length > 0 || getDecreasedOrRemovedItems().length > 0;
@@ -312,7 +317,7 @@ export default function AddEditContent () {
                     <div className='text-sm text-gray-600 text-center'>{new Date().toLocaleDateString()}</div>
                 </div>
             {/* Scrollable Area */}
-                <div className="order-items-scrollable flex flex-col gap-2.5 overflow-y-scroll pr-2">
+                <div className="order-items-scrollable flex flex-col gap-2.5 flex-1 overflow-y-scroll pr-2">
                     {/* These are order items */}
                     {orderItems.length > 0 ? (
                         orderItems.map((item, index) => (
@@ -355,7 +360,7 @@ export default function AddEditContent () {
             {/* End of Order Summary Section */}
 
             {/* Action Buttons Section (flex-col for stacking buttons) */}
-            <div className="flex flex-col items-center mt-8 w-full gap-4">
+            <div className="flex flex-col items-center mt-4 w-full gap-4">
                 {/*Display Error Message */}
                 {error && (
                     <p className="text-red-500 text-center font-bold mb-2">{error}</p>
@@ -384,6 +389,17 @@ export default function AddEditContent () {
                 active:bg-[#2ecc71] active:translate-y-0 active:shadow-md"
                 >
                     Add/Edit
+                </button>
+
+            {/*Movement towards PaymentPage button*/}
+                <button
+                    onClick={handleMoveTowardsPayment}
+                    className="py-3 px-8 bg-[#2ecc71] text-white font-bold rounded-lg shadow-md
+                    transition-all duration-200 ease-in-out
+                    hover:bg-[#2ecc71] hover:-translate-y-0.5 hover:shadow-lg
+                    active:bg-[#2ecc71] active:translate-y-0 active:shadow-md"
+                >
+                    Move to Payment
                 </button>
             </div>
         </div>
