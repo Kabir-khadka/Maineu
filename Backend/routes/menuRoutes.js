@@ -4,6 +4,10 @@ const MenuItem = require('../models/MenuItem');
 const upload = require('../middlewares/upload'); // Assuming you have a middleware for handling file uploads
 const Category = require('../models/Category'); // Import the Category model
 
+
+//Exporting a function that takes the 'io' instance
+module.exports = (io) => {
+
 //Create a new Item
 router.post('/', upload.single('image'), async (req, res) => {
     try {
@@ -11,6 +15,10 @@ router.post('/', upload.single('image'), async (req, res) => {
         const image = req.file ? `/uploads/${req.file.filename}` : null; 
         const newItem = new MenuItem({ name, price, category, available, image });
         await newItem.save();
+
+        //Emitting a Socket.IO event for a new menu item
+        io.emit('newMenuItem', newItem);
+
         res.status(201).json(newItem);
     } catch (error) {
         res.status(400).json({ error: error.message });
@@ -65,6 +73,9 @@ router.patch('/:id/toggle', async (req, res) => {
     // Save changes
     await menuItem.save();
 
+    //Emit a Socket.IO event for menu item availablility toggle
+    io.emit('menuItemToggled', menuItem);
+
     res.status(200).json(menuItem);
   } catch (error) {
     res.status(500).json({ error: 'Failed to toggle availability' });
@@ -91,6 +102,10 @@ router.put('/:id', upload.single('image'), async (req, res) => {
 
 
         const updatedItem = await MenuItem.findByIdAndUpdate(req.params.id, updatedFields, { new: true });
+
+        //Emitting a Socket.IO event for a menu item update
+        io.emit('menuItemUpdated', updatedItem);
+
         res.status(200).json(updatedItem);
     } catch (error) {
         res.status(400).json({ error: error.message });
@@ -100,7 +115,14 @@ router.put('/:id', upload.single('image'), async (req, res) => {
 // Delete a Menu Item
 router.delete('/:id', async (req, res)=> {
     try {
-        await MenuItem.findByIdAndDelete(req.params.id);
+        const deletedItem = await MenuItem.findByIdAndDelete(req.params.id);
+        if(!deletedItem) {
+          return res.status(404).json({ message: 'Menu item not found' });
+        }
+
+        //Emitting a Socket.IO event for a menu item deletion
+        io.emit('menuItemDeleted', { _id: deletedItem._id });
+        
         res.status(204).end();
     } catch (error) {
         res.status(500).json({ error: error.message });
@@ -115,7 +137,11 @@ router.delete('/', async (req, res) => {
     }
 
     try {
-        await MenuItem.deleteMany({_id: { $in: ids } });
+        const result = await MenuItem.deleteMany({_id: { $in: ids } });
+
+        //Emitting a Socket.IO event for bulk menu item deletion
+        io.emit('menuItemBulkDeleted', { deletedIds: ids });
+
         res.status(204).end();
     } catch (error) {
       res.status(500).json({ error: error.message });
@@ -131,7 +157,11 @@ router.patch('/toggle', async (req, res) => {
 
     try {
         // Get current availability of all targeted items
-        const items = await MenuItem.find({ _id: { $in : ids } });
+        const itemsToToggle = await MenuItem.find({ _id: { $in : ids } });
+
+        if (itemsToToggle.length === 0) {
+                return res.status(404).json({ message: 'No items found with provided IDs' });
+        }
 
         // Toggle availability for each item
         const bulkOps = items.map(item => ({
@@ -146,6 +176,10 @@ router.patch('/toggle', async (req, res) => {
         }
 
         const updatedItems = await MenuItem.find({ _id: { $in: ids } });
+
+        //Emitting a Socket.IO event for bulk availability toggle
+        io.emit('menuItemBulkToggled', updatedItems);
+
         res.status(200).json(updatedItems);
     } catch (error) {
         res.status(500).json({ error: 'Failed to toggle availability' });
@@ -166,13 +200,17 @@ router.patch('/change-category', async (req, res) => {
       );
 
       const updatedItems = await MenuItem.find({ _id: { $in: ids }});
+
+      //Emitting a Socket.IO event for bulk category change
+      io.emit('menuItemBulkCategoryChanged', updatedItems);
+      
       res.status(200).json(updatedItems);
     } catch (error) {
       res.status(500).json({ error: error.message });
     }
 });
-
-module.exports = router;
+return router;
+}
 //This code defines the routes for managing menu items in a restaurant application.
 // It includes routes to create, read, update, and delete menu items using Express.js and Mongoose for MongoDB interactions.
 // It also includes a route to fetch all unique categories available in the menu items.

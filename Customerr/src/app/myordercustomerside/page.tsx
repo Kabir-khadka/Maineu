@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useOrder } from '../context/OrderContext';
 import {Order, OrderItem} from '@/types/order';
 import BackButton from '@/components/ReusableComponents/BackButton';
+import socket from '@/lib/socket';
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL;
 
@@ -131,8 +132,12 @@ const MyOrderPage: React.FC = () => {
                 });
 
                 if (response.ok) {
+                    const createdOrder: Order = await response.json(); //Capturing the created order
                     console.log('New items confirmed successfully (POST).');
                     changesSuccessful = true;
+                    //Emitting Socket.IO event for new order
+                    socket.emit('newOrder', createdOrder);
+                    console.log('Socket: Emitted newOrder event:', createdOrder);
                 } else {
                     const errorData = await response.json();
                     console.error('Failed to confirm new items:', errorData);
@@ -204,6 +209,7 @@ const MyOrderPage: React.FC = () => {
             });
 
             let patchPromises: Promise<Response>[] = [];
+            const patchedOrderIds: string[] = []; //Tracking successful patches for emission
 
             // Now, send PATCH requests for all identified orders
             for (const orderId in ordersToPatchMap) {
@@ -228,6 +234,11 @@ const MyOrderPage: React.FC = () => {
                         method: 'PATCH',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify(updateOrderData)
+                    }).then (res => {
+                        if (res.ok) {
+                            patchedOrderIds.push(orderId); //Adding ID to successful patches
+                        }
+                        return res; //Passing the response along
                     })
                 );
             }
@@ -238,6 +249,18 @@ const MyOrderPage: React.FC = () => {
                 if (allPatchesSuccessful) {
                     console.log('Decreases/removals confirmed successfully (PATCH).');
                     changesSuccessful = true;
+
+                    //Emitting Socket.IO event for updated orders
+                    const updatedOrdersToEmit: Order[] = [];
+                    for (const orderId of patchedOrderIds) {
+                        // Find the fully updated order from ordersToPatchMap to emit
+                        updatedOrdersToEmit.push(ordersToPatchMap[orderId]);
+                    }
+                    if (updatedOrdersToEmit.length > 0) {
+                        socket.emit('orderStatusUpdated', updatedOrdersToEmit); // Backend expects array of orders
+                        console.log('Socket: Emitted orderStatusUpdated event for:', updatedOrdersToEmit);
+                    }
+                    
                     // If after patching, all items are removed from all active orders,
                     // and there were no new items added, then the order is cleared.
                     if (orderItems.length === 0 && newlyAddedItems.length === 0) {

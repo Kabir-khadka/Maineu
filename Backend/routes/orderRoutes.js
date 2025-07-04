@@ -3,6 +3,8 @@ const router = express.Router();
 const Order = require('../models/Order'); // Import the Order model
 const ArchivedOrder = require('../models/ArchivedOrder'); // Import the ArchivedOrder model
 
+//Exports a function that takes the 'io' instance
+module.exports = (io) => {
 
 // POST route to create a new order
 //This route will be used specifically for new items or increases in quantity.
@@ -27,6 +29,11 @@ router.post('/orders', async (req, res) => {
 
         // Save the order to the database
         await newOrder.save();
+
+        //Emit a Socket.IO event for a new order
+        //This will notify all connected clients (e.g Kitchen, admin)
+        io.emit('newOrder', newOrder);
+
         // Send a response back to the client
         console.log('Recieved order:', newOrder._id, req.body);
         res.status(201).json({message: 'Order recieved successfully!', orderId: newOrder._id});
@@ -97,6 +104,9 @@ router.patch('/orders/:id', async (req, res) => {
         }
         await order.save();
 
+        //Emitting a Socket.IO event for an updated order
+        io.emit('orderUpdated', order);
+
         console.log('Updated order (PATCH):', order._id, orderItems, 'New Status:', order.status);
         res.json(order);
     } catch (err) {
@@ -137,6 +147,9 @@ router.patch('/orders/:id/status', async (req, res) => {
             order.statusHistory.push(order.status);//Pushing old status to history
             order.status = status; //Update status
             await order.save();
+
+            //Emiiting a Scoket.IO event for order status change
+            io.emit('orderStatusUpdated', order);
         }
         res.json(order);
     } catch (error) {
@@ -167,6 +180,9 @@ router.patch('/orders/:id/revert-status', async (req, res) => {
 
         await order.save(); // Save the order with the updated status and history
 
+        //Emitting a Socket.IO event for order status chnage (revert)
+        io.emit('orderStatusUpdated', order);
+
         console.log('Reverted order status:', order._id, 'New Status:', order.status, 'Remaining History:', order.statusHistory);
         res.json(order);
     } catch (err) {
@@ -191,6 +207,9 @@ router.delete('/orders/:id/archive', async (req, res) => {
         //Delete the original from active orders
         await Order.findByIdAndDelete(order._id);
 
+        //Emitting a Socket.IO event for order archived/deleted
+        io.emit('orderArchived', { orderId: order._id, tableNumber: order.tableNumber });
+
         res.status(200).json({ message: 'Order archived and deleted' });
     } catch (error) {
         console.error('Error archiving order:', error);
@@ -198,9 +217,8 @@ router.delete('/orders/:id/archive', async (req, res) => {
     }
 });
 
-
-
-module.exports = router;
+return router;
+}
 
 //The /api/orders POST route receives order data from the frontend.
 
