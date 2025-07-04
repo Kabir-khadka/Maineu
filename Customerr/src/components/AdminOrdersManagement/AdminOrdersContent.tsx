@@ -4,6 +4,7 @@ import React, { useEffect, useState } from 'react';
 import TableCard from './TableCard';
 import {Order, OrderItem} from '@/types/order';
 import OrderDetailSidebar from './OrderDetailSidebar';
+import socket from '@/lib/socket';
 
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL;
@@ -29,7 +30,98 @@ export default function AdminOrdersContent() {
         };
 
         fetchOrders();
-    }, []);
+
+        //Adding Socket.IO Listeners
+    socket.on('newOrder', (newOrder: Order) => {
+        console.log('Socket: Recieved newOrder', newOrder);
+        setOrders(prevOrders => [...prevOrders, newOrder]); // Add new order to state
+        //If the sidebar is open and the new order belongs to the currently viewed table,
+        //update selectedOrders as well
+        if (showSidebar && selectedOrders && newOrder.tableNumber === selectedOrders[0]?.tableNumber) {
+            setSelectedOrder(prevSelected => [...(prevSelected || []), newOrder]);
+        }
+    });
+
+    socket.on('orderUpdated', (updatedOrder: Order) => { // <--- ADDED: Listener for orderUpdated
+            console.log('Socket: Received orderUpdated', updatedOrder);
+            setOrders(prevOrders =>
+                prevOrders.map(order =>
+                    order._id === updatedOrder._id ? updatedOrder : order
+                )
+            );
+            // Also update selectedOrders if the sidebar is open and this order is part of it
+            if (showSidebar && selectedOrders?.some(o => o._id === updatedOrder._id)) {
+                setSelectedOrder(prevSelected =>
+                    prevSelected!.map(order =>
+                        order._id === updatedOrder._id ? updatedOrder : order
+                    )
+                );
+            }
+        });
+
+    socket.on('orderStatusUpdated', (updatedOrder: Order) => {
+        console.log('Socket: Received orderStatusUpdated', updatedOrder);
+        setOrders(prevOrders => 
+            prevOrders.map(order => 
+                order._id === updatedOrder._id ? updatedOrder : order
+            )
+        );
+
+        // Also update selectedOrders if the sidebar is open and this order is part of it
+        if (showSidebar && selectedOrders?.some(o => o._id ===updatedOrder._id)) {
+            setSelectedOrder(prevSelected => 
+                prevSelected!.map(order =>
+                    order._id === updatedOrder._id ? updatedOrder : order
+                )
+            );
+        }
+    });
+
+    socket.on('ordersBulkToggled', (updatedOrders: Order[]) => {
+            console.log('Socket: Received ordersBulkToggled', updatedOrders);
+            setOrders(prevOrders => {
+                // Create a map for quick lookup of updated orders by ID
+                const updatedOrdersMap = new Map(updatedOrders.map(order => [order._id, order]));
+                return prevOrders.map(order => updatedOrdersMap.get(order._id) || order);
+            });
+
+             if (showSidebar && selectedOrders && updatedOrders.some(uo => selectedOrders.some(so => so._id === uo._id))) {
+                setSelectedOrder(prevSelected => {
+                    const updatedSelectedMap = new Map(updatedOrders.map(order => [order._id, order]));
+                    return prevSelected!.map(order => updatedSelectedMap.get(order._id) || order);
+                });
+            }
+    });
+
+    socket.on('orderArchived', ({ _id }: { _id: string }) => {
+            console.log('Socket: Received orderArchived for ID:', _id);
+            setOrders(prevOrders => prevOrders.filter(order => order._id !== _id));
+            // If the archived order was selected in the sidebar, close the sidebar
+            if (selectedOrders?.some(o => o._id === _id)) {
+                handleCloseSidebar();
+            }
+    });
+
+        socket.on('ordersBulkArchived', ({ archivedIds }: { archivedIds: string[] }) => {
+            console.log('Socket: Received ordersBulkArchived for IDs:', archivedIds);
+            setOrders(prevOrders => prevOrders.filter(order => !archivedIds.includes(order._id)));
+             // If any of the archived orders were selected in the sidebar, close the sidebar
+            if (selectedOrders && archivedIds.some(id => selectedOrders.some(so => so._id === id))) {
+                handleCloseSidebar();
+            }
+    });
+
+    // Clean up socket listeners on component unmount
+        return () => {
+            socket.off('newOrder');
+            socket.off('orderUpdated');
+            socket.off('orderStatusUpdated');
+            socket.off('ordersBulkToggled');
+            socket.off('orderArchived');
+            socket.off('ordersBulkArchived');
+        };
+    }, [showSidebar, selectedOrders]); // Dependencies: Re-run if sidebar or selectedOrders change to update logic.
+  
 
     //Helper function to determine the aggregated display status for a given table based on its orders.
     //Prioritzes 'In progress', then 'Delivered', then 'Paid', and finally 'Cancelled'.
@@ -170,9 +262,9 @@ export default function AdminOrdersContent() {
             });
             if (res.ok) {
                 const updatedOrder = await res.json();
-                setOrders((prev) =>
+                {/*setOrders((prev) =>
                     prev.map((order) => (order._id === orderId ? updatedOrder : order))
-                );
+                );*/} // This will be updated by the socket.on('orderStatusUpdated') listener
             } else {
                 console.error('Failed to update order status');
             }
@@ -236,9 +328,9 @@ export default function AdminOrdersContent() {
             });
             if (res.ok) {
                 const updatedOrder = await res.json();
-                setOrders((prev) => 
+                {/*setOrders((prev) => 
                     prev.map((order) => (order._id === orderId ? updatedOrder : order))
-                );
+                );*/} // This will be updated by the socket.on('orderStatusUpdated') listener
             } else {
                 console.error('Failed to revert status');
             }
@@ -269,9 +361,10 @@ export default function AdminOrdersContent() {
                     const allSuccess = responses.every(res => res.ok);
 
                     if (allSuccess) {
-                        // Remove all orders for this table from state
+                        {/*// Remove all orders for this table from state
                         const orderIds = tableOrders.map(order => order._id);
-                        setOrders(prev => prev.filter(order => !orderIds.includes(order._id)));
+                        setOrders(prev => prev.filter(order => !orderIds.includes(order._id)));*/}
+                        // This will be updated by the socket.on('ordersBulkArchived') listener
                     } else {
                         console.error('Failed to archive some orders');
                     }
@@ -289,7 +382,8 @@ export default function AdminOrdersContent() {
             });
 
             if (res.ok) {
-                setOrders(prev => prev.filter(order => order._id !== orderId));
+                // This will be updated by the socket.on('orderArchived') listener
+                //setOrders(prev => prev.filter(order => order._id !== orderId));
             } else {
                 console.error('Failed to archive order');
             }

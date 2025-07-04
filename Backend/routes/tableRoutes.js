@@ -4,6 +4,10 @@ const Table = require('../models/Table'); // Import the Table model
 const { authorizeAdmin } = require('../middlewares/authMiddleware'); // Import the authorization middleware
 
 
+//Exporting a function that takes the 'io' instance
+module.exports = (io) => {
+
+
 // Crud operations for Table model
 
 //GET all tables
@@ -61,6 +65,10 @@ router.post('/', authorizeAdmin, async (req, res) => {
         }
 
         const newTable =  await Table.create({ tableNumber, status });
+
+        //Emitting a Socket.IO event for a new table
+        io.emit('newTable', newTable);
+
         res.status(201).json({ success: true, data: newTable });
     } catch (error) {
         if (error.code === 11000) {
@@ -85,6 +93,10 @@ router.put('/:id', authorizeAdmin, async (req, res) => {
         if (!updatedTable) {
             return res.status(404).json({ success: false, message: 'Table not found' });
         }
+
+        //Emitting a Socket.IO event for a table update
+        io.emit('tableUpdated', updatedTable);
+
         res.status(200).json({ success: true, data: updatedTable });
     } catch (error) {
         if (error.code === 11000) {
@@ -103,6 +115,10 @@ router.delete('/:id', authorizeAdmin, async (req, res) => {
         if (!deletedTable) {
             return res.status(404).json({ success: false, message: 'Table not found' });
         }
+
+        //Emitting a Socket.IO event for a table deletion
+        io.emit('tableDeleted', { _id: deletedTable._id, tableNumber: deletedTable.tableNumber });
+        
         res.status(200).json({ success: true, message: 'Table deleted successfully' });
     } catch (error) {
         console.error('Error deleting table:', error);
@@ -110,5 +126,7 @@ router.delete('/:id', authorizeAdmin, async (req, res) => {
     }
 });
 
-module.exports = router; // Export the router to be used in the main app file
+return router;
+}
+// Export the router to be used in the main app file
 // This router handles CRUD operations for the Table model, including fetching all tables, fetching by table number or QR code identifier, creating, updating, and deleting tables.
