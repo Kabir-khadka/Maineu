@@ -19,7 +19,6 @@ const PORT = process.env.PORT || 5000;
 const allowedOrigins = [
     process.env.CLIENT_URL, // This will be "http://192.168.1.74:3000" if set in .env
     "http://localhost:3000",
-    "http://127.0.0.1:3000"
 ].filter(Boolean); // Filter out any empty/undefined values if CLIENT_URL is not set
 
 // Middleware

@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState, useCallback } from 'react';
 import { useOrder } from '@/app/context/OrderContext';
+import socket from '@/lib/socket';
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL;
 
@@ -28,13 +29,14 @@ const FoodMenu = () => {
   const [error, setError] = useState<string | null>(null);
   const [categories, setCategories] = useState<string[]>([]);
 
-  // Fetch categories from the server
-  const fetchCategories = async () => {
+ // Fetch categories from the server - Wrapped in useCallback for useEffect dependency
+  const fetchCategories = useCallback(async () => {
     try {
       const res = await fetch(`${BACKEND_URL}/api/menu/categories/all`);
       if (!res.ok) throw new Error('Failed to fetch categories');
       const categoryNames: string[] = await res.json();
       setCategories(categoryNames);
+      //Setting active button to the first category if none is active yet
       if (categoryNames.length > 0) {
         setActiveButton(prev => prev || categoryNames[0]);
       }
@@ -42,9 +44,11 @@ const FoodMenu = () => {
       console.error(err);
       setError('Failed to load categories');
     }
-  };
+  }, [activeButton]);
 
-  const fetchMenuItems = async (category: string) => {
+  // Fetch menu items for the active category - Wrapped in useCallback for useEffect dependency
+  const fetchMenuItems = useCallback(async (category: string | null) => {
+    if (!category) return; // Don't fetch if no category is selected
     setIsLoading(true);
     setError(null);
     try {
@@ -62,17 +66,58 @@ const FoodMenu = () => {
     } finally {
       setIsLoading(false);
     }
-  };
-
-  useEffect(() => {
-    fetchCategories();
   }, []);
 
+  // Initial data fetch and Socket.IO listeners
+  useEffect(() => {
+    fetchCategories();
+
+    // ---------------- Socket.IO Integration ----------------
+    const handleMenuChange = () => {
+      console.log('Socket: Menu change detected. Re-fetching categories and menu items.');
+      fetchCategories(); // Re-fetch all categories to ensure buttons are up-to-date
+      if (activeButton) {
+        fetchMenuItems(activeButton); // Re-fetch items for the current active category
+      }
+    };
+
+    // Listen for all relevant menu item events from the admin panel
+    socket.on('newMenuItem', handleMenuChange);
+    socket.on('menuItemUpdated', handleMenuChange);
+    socket.on('menuItemToggled', handleMenuChange);
+    socket.on('menuItemDeleted', handleMenuChange);
+    socket.on('menuItemBulkDeleted', handleMenuChange);
+    socket.on('menuItemBulkToggled', handleMenuChange);
+    socket.on('menuItemBulkCategoryChanged', handleMenuChange);
+    // Category-specific events
+        socket.on('newCategoryAdded', handleMenuChange);
+        socket.on('categoryRemoved', handleMenuChange);
+        socket.on('categoryUpdated', handleMenuChange); // Ensure this is also listened for if category names can be edited
+        socket.on('categoriesReordered', handleMenuChange);
+
+    // Clean up on component unmount
+    return () => {
+      socket.off('newMenuItem', handleMenuChange);
+      socket.off('menuItemUpdated', handleMenuChange);
+      socket.off('menuItemToggled', handleMenuChange);
+      socket.off('menuItemDeleted', handleMenuChange);
+      socket.off('menuItemBulkDeleted', handleMenuChange);
+      socket.off('menuItemBulkToggled', handleMenuChange);
+      socket.off('menuItemBulkCategoryChanged', handleMenuChange);
+      // Category-specific events cleanup
+      socket.off('newCategoryAdded', handleMenuChange);
+      socket.off('categoryRemoved', handleMenuChange);
+      socket.off('categoryUpdated', handleMenuChange);
+      socket.off('categoriesReordered', handleMenuChange);
+    };
+  }, [fetchCategories, fetchMenuItems, activeButton]); // Dependencies for useEffect
+
+  // Fetch items whenever the active category button changes
   useEffect(() => {
     if (activeButton) {
       fetchMenuItems(activeButton);
     }
-  }, [activeButton]);
+  }, [activeButton, fetchMenuItems]);
 
   const handleButtonClick = (category: string) => {
     setActiveButton(category);
@@ -117,68 +162,78 @@ const FoodMenu = () => {
   // --- END FIXED QUANTITY HANDLERS ---
 
   return (
-    <div style={styles.container}>
+   <div className="flex flex-col items-center p-2.5 w-full bg-[#fdd7a2]">
       {/* Category Buttons */}
-      <div style={styles.buttonGrid}>
+      <div className="grid grid-cols-4 gap-2.5 w-full max-w-2xl justify-center -ml-4">
         {categories.map((cat) => (
           <button
             key={cat}
             onClick={() => handleButtonClick(cat)}
-            style={{
-              ...styles.button,
-              ...(activeButton === cat ? styles.activeButton : {}),
-            }}
+            className={`
+              p-2.5 text-sm font-bold cursor-pointer border border-gray-300 rounded-md
+              bg-transparent text-gray-800 text-center transition-colors duration-300 transform
+              ${activeButton === cat ? 'bg-gray-800 text-white shadow-md scale-105' : 'hover:bg-gray-100 hover:scale-105'}
+            `}
           >
-            <span style={styles.text}>{cat}</span>
+            <span>{cat}</span>
           </button>
         ))}
       </div>
 
       {/* Available items (optional button) */}
-      <div style={styles.availableItemsContainer}>
-        <button style={styles.availableItemsButton}>Available items</button>
+      <div className="mt-4">
+        <button 
+          className="py-3 px-1.5 text-sm font-semibold cursor-pointer
+                     bg-transparent text-[#FF4500] rounded-lg border-none
+                     transition-all duration-300 ml-52"
+          >
+            Available items
+        </button>
       </div>
 
       {/* Render menu items */}
-      <div style={styles.contentContainer}>
-        <h2>{activeButton} Items</h2>
+       <div className="mt-5 w-full max-w-2xl flex flex-col gap-4">
+        <h2 className="text-xl font-semibold mb-4">{activeButton} Items</h2>
         {isLoading ? (
-          <p>Loading...</p>
+          <p className="text-center text-gray-600">Loading...</p>
         ) : error ? (
-          <p style={{ color: 'red' }}>{error}</p>
+          <p className="text-red-600 text-center">{error}</p>
         ) : menuItems.length === 0 ? (
-          <p>No items in this category.</p>
+          <p className="text-center text-gray-500">No items in this category.</p>
         ) : (
           menuItems.map((item) => (
-            <div key={item._id} style={styles.card}>
+            <div key={item._id} 
+            className="flex items-center gap-3 border border-gray-200 rounded-lg p-2.5 bg-gray-50 shadow-sm"
+            >
               <img
                 src={`${BACKEND_URL}${item.image}`}
                 alt={item.name}
-                style={styles.image}
+                className="w-20 h-20 rounded-lg object-cover"
               />
-              <div style={styles.details}>
-                <h3 style={styles.itemName}>{item.name}</h3>
-                <p style={styles.price}>${item.price.toFixed(2)}</p>
-                <p style={styles.status}>
+              <div className="flex-1">
+                <h3 className="m-0 text-lg font-semibold">{item.name}</h3>
+                <p className="my-1 text-base text-gray-700">${item.price.toFixed(2)}</p>
+                <p className="text-xs text-gray-600">
                   {item.available ? 'Available' : 'Unavailable'}
                 </p>
-                <div style={styles.quantityControls}>
+                <div  className="flex items-center gap-2.5 mt-2">
                   <button 
                     onClick={() => handleDecreaseQuantity(item)}
                     disabled={item.quantity === 0}
-                    style={{
-                      ...styles.quantityButton,
-                      opacity: item.quantity === 0 ? 0.5 : 1,
-                      cursor: item.quantity === 0 ? 'not-allowed' : 'pointer'
-                    }}
+                    className={`
+                      py-1.5 px-2.5 border border-gray-300 rounded bg-gray-100 text-base
+                      transition-colors duration-300 hover:bg-gray-200
+                      ${item.quantity === 0 ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}
+                    `}
                   >
                     -
                   </button>
                   {/* This quantity is now purely the local count for this FoodMenu session */}
-                  <span style={styles.quantityDisplay}>{item.quantity}</span>
+                  <span  className="text-base font-medium">{item.quantity}</span>
                   <button 
                     onClick={() => handleIncreaseQuantity(item)}
-                    style={styles.quantityButton}
+                    className="py-1.5 px-2.5 border border-gray-300 rounded bg-gray-100 text-base
+                               transition-colors duration-300 hover:bg-gray-200 cursor-pointer"
                   >
                     +
                   </button>
@@ -190,105 +245,6 @@ const FoodMenu = () => {
       </div>
     </div>
   );
-};
-
-// 🔧 Styling
-const styles: { [key: string]: React.CSSProperties } = {
-  container: {
-    display: 'flex',
-    backgroundColor: '#fdd7a2',
-    flexDirection: 'column',
-    alignItems: 'center',
-    padding: '10px',
-    width: '100%',
-  },
-  buttonGrid: {
-    display: 'grid',
-    gridTemplateColumns: 'repeat(4, 1fr)',
-    gap: '10px',
-    width: '100%',
-    maxWidth: '600px',
-    justifyContent: 'center',
-    marginLeft: '-15px',
-  },
-  button: {
-    padding: '10px',
-    fontSize: '14px',
-    fontWeight: 'bold',
-    cursor: 'pointer',
-    border: '1px solid #ccc',
-    borderRadius: '6px',
-    background: 'none',
-    color: '#333',
-    textAlign: 'center',
-    transition: 'background 0.3s ease, transform 0.2s ease',
-  },
-  activeButton: {
-    background: '#444',
-    color: '#fff',
-    boxShadow: '2px 2px 5px rgba(0, 0, 0, 0.3)',
-  },
-  text: {
-    fontWeight: 'bold',
-  },
-  availableItemsContainer: {
-    marginTop: '15px',
-  },
-  availableItemsButton: {
-    padding: '12px 5px',
-    fontSize: '14px',
-    fontWeight: '600',
-    cursor: 'pointer',
-    backgroundColor: 'transparent',
-    color: '#FF4500',
-    borderRadius: '10px',
-    border: 'none',
-    textShadow: '1px 2px 4px rgba(0, 0, 0, 0.4)',
-    transition: 'all 0.3s ease',
-    marginLeft: '200px',
-  },
-  contentContainer: {
-    marginTop: '20px',
-    width: '100%',
-    maxWidth: '600px',
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '15px',
-  },
-  card: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '12px',
-    border: '1px solid #ddd',
-    borderRadius: '8px',
-    padding: '10px',
-    backgroundColor: '#f9f9f9',
-  },
-  image: {
-    width: '80px',
-    height: '80px',
-    borderRadius: '8px',
-    objectFit: 'cover',
-  },
-  details: {
-    flex: 1,
-  },
-  itemName: {
-    margin: 0,
-  },
-  price: {
-    margin: '4px 0',
-  },
-  status: {
-    fontSize: '12px',
-    color: '#666',
-  },
-  quantityControls: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '10px',
-    marginTop: '8px',
-  },
 };
 
 export default FoodMenu;

@@ -1,5 +1,4 @@
 import React from 'react';
-import styles from './SimplePagination.module.css';
 
 interface SimplePaginationProps {
   currentPage: number;
@@ -17,28 +16,39 @@ const SimplePagination: React.FC<SimplePaginationProps> = ({ currentPage, totalP
   };
 
   return (
-    <div className={styles.wrapper}>
-    <div className={styles.paginationContainer}>
-      <button
-        onClick={handlePrev}
-        disabled={currentPage === 1}
-        className={styles.navButton}
-      >
-        &lt;
-      </button>
+    // Replaced styles.wrapper with Tailwind classes
+    <div className="flex justify-center mt-6">
+      {/* Replaced styles.paginationContainer with Tailwind classes */}
+      <div className="flex items-center justify-center gap-3 p-2 px-4 border border-gray-300 rounded-lg w-fit bg-gray-50 font-sans">
+        <button
+          onClick={handlePrev}
+          disabled={currentPage === 1}
+          // Replaced styles.navButton with Tailwind classes
+          className="bg-transparent border-none text-lg cursor-pointer py-1.5 px-3 rounded
+                     transition-colors duration-200 focus:outline-none
+                     hover:bg-gray-200
+                     disabled:text-gray-400 disabled:cursor-not-allowed"
+        >
+          &lt;
+        </button>
 
-      <span className={styles.pageIndicator}>
-        {String(currentPage).padStart(2, '0')}/{String(totalPages).padStart(2, '0')}
-      </span>
+        {/* Replaced styles.pageIndicator with Tailwind classes */}
+        <span className="font-medium text-base text-gray-700">
+          {String(currentPage).padStart(2, '0')}/{String(totalPages).padStart(2, '0')}
+        </span>
 
-      <button
-        onClick={handleNext}
-        disabled={currentPage === totalPages}
-        className={styles.navButton}
-      >
-        &gt;
-      </button>
-    </div>
+        <button
+          onClick={handleNext}
+          disabled={currentPage === totalPages}
+          // Replaced styles.navButton with Tailwind classes
+          className="bg-transparent border-none text-lg cursor-pointer py-1.5 px-3 rounded
+                     transition-colors duration-200 focus:outline-none
+                     hover:bg-gray-200
+                     disabled:text-gray-400 disabled:cursor-not-allowed"
+        >
+          &gt;
+        </button>
+      </div>
     </div>
   );
 };

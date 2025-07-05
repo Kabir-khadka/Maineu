@@ -2,7 +2,6 @@
 
 import React from 'react';
 import { Category } from '@/types/menu';
-import styles from './MenuManagement.module.css';
 
 interface FilterBarProps {
   selectedCategory: string;
@@ -20,11 +19,15 @@ const FilterBar: React.FC<FilterBarProps> = ({
   onAvailabilityChange
 }) => {
   return (
-    <div className={styles.filterContainer}>
+    // Replaced styles.filterContainer with Tailwind classes
+    <div className="flex gap-4 mb-6 items-center flex-wrap">
       <select
         value={selectedCategory}
         onChange={(e) => onCategoryChange(e.target.value)}
-        className={styles.filterSelect}
+        // Replaced styles.filterSelect with Tailwind classes
+        className="p-3 border border-gray-300 rounded text-base min-w-[150px]
+                   focus:border-blue-500 focus:ring-2 focus:ring-blue-200 focus:outline-none
+                   ]"
       >
         <option value="">All Categories</option>
         {categories.map((cat) => (
@@ -37,7 +40,10 @@ const FilterBar: React.FC<FilterBarProps> = ({
       <select
         value={selectedAvailability}
         onChange={(e) => onAvailabilityChange(e.target.value)}
-        className={styles.filterSelect}
+        // Replaced styles.filterSelect with Tailwind classes
+        className="p-3 border border-gray-300 rounded text-base min-w-[150px]
+                   focus:border-blue-500 focus:ring-2 focus:ring-blue-200 focus:outline-none
+                   ]"
       >
         <option value="">All Statuses</option>
         <option value="available">Available</option>
