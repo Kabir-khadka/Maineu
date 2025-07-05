@@ -3,17 +3,15 @@
 
 'use client'
 
-import React, { useEffect, useState } from "react";
-import styles from '@/app/menu-management/menu.module.css';
+import React, { useEffect, useState, useCallback } from "react";
 import { MenuItem, Category } from '@/types/menu';
 import ToggleSwitch from '@/components/MenuManagement/ToggleSwitch';
 import MenuItemTable from '@/components/MenuManagement/MenuItemTable'; // Adjust the path if needed
 import SearchBar from '@/components/MenuManagement/SearchBar';
 import FilterBar from '@/components/MenuManagement/FilterBar'; // Adjust the path if needed
-import tooglestyles from '@/components/MenuManagement/MenuManagement.module.css';
 import SimplePagination from '@/components/MenuManagement/SimplePagination';//Import the simple pagination component
 import BulkActionBar from  "@/components/MenuManagement/BulkActionBar";
-
+import socket from "@/lib/socket";
 
 
 const API_URL = 'http://localhost:5000/api/menu'; 
@@ -83,7 +81,7 @@ export default function AdminMenuContent() {
     };
 
     //Fetch menu items
-    const fetchMenuItems = async () => {
+    const fetchMenuItems = useCallback(async () => {
         setIsLoading(true);
         try {
             const res = await fetch(API_URL);
@@ -91,31 +89,111 @@ export default function AdminMenuContent() {
             const data = await res.json();
             setMenuItems(data);
             setError(null);
-
         } catch (err) {
-            setError('Error fetching menu items. PLease ensure your backend server is running.');
+            setError('Error fetching menu items. Please ensure your backend server is running.');
             console.error('Error fetching items:', err);
         } finally {
             setIsLoading(false);
         }
-    };
+    }, []);
 
-    // Fetch categories
-    const fetchCategories = async () => {
-  try {
-    const res = await fetch('http://localhost:5000/api/categories');
-    if (!res.ok) throw new Error('Failed to fetch categories');
-    const data: Category[] = await res.json(); // Ensure proper typing
-    setCategories(data); // Use Category[] instead of string[]
-  } catch (error) {
-    console.error('Failed to fetch categories:', error);
-  }
-};
+    // Fetch categories - Wrapped in useCallback for useEffect dependency
+    const fetchCategories = useCallback(async () => {
+        try {
+            const res = await fetch('http://localhost:5000/api/categories');
+            if (!res.ok) throw new Error('Failed to fetch categories');
+            const data: Category[] = await res.json();
+            setCategories(data);
+        } catch (error) {
+            console.error('Failed to fetch categories:', error);
+        }
+    }, []);
 
     useEffect(() => {
         fetchMenuItems();
         fetchCategories();
-    }, []);
+
+        //Socket.IO integration using shared instance i.e lib/socket.js
+        // Event listener for a new menu item
+        socket.on('newMenuItem', (newItem: MenuItem) => {
+            console.log('Socket: New menu item received:', newItem);
+            setMenuItems((prevItems) => [...prevItems, newItem]);
+        });
+
+        // Event listener for a menu item update
+        socket.on('menuItemUpdated', (updatedItem: MenuItem) => {
+            console.log('Socket: Menu item updated:', updatedItem);
+            setMenuItems((prevItems) =>
+                prevItems.map((item) =>
+                    item._id === updatedItem._id ? updatedItem : item
+                )
+            );
+        });
+
+        // Event listener for menu item availability toggle
+        socket.on('menuItemToggled', (toggledItem: MenuItem) => {
+            console.log('Socket: Menu item availability toggled:', toggledItem);
+            setMenuItems((prevItems) =>
+                prevItems.map((item) =>
+                    item._id === toggledItem._id ? toggledItem : item
+                )
+            );
+        });
+
+        // Event listener for a single menu item deletion
+        socket.on('menuItemDeleted', (data: { _id: string }) => {
+            console.log('Socket: Menu item deleted:', data._id);
+            setMenuItems((prevItems) => prevItems.filter((item) => item._id !== data._id));
+        });
+
+        // Event listener for bulk menu item deletion
+        socket.on('menuItemBulkDeleted', (data: { deletedIds: string[] }) => {
+            console.log('Socket: Bulk menu items deleted:', data.deletedIds);
+            setMenuItems((prevItems) =>
+                prevItems.filter((item) => !data.deletedIds.includes(item._id))
+            );
+            setSelectedItems([]); // Clear selected items after bulk delete
+        });
+
+        // Event listener for bulk menu item availability toggle
+        socket.on('menuItemBulkToggled', (updatedItems: MenuItem[]) => {
+            console.log('Socket: Bulk menu items toggled:', updatedItems);
+            // Convert updatedItems to a map for efficient lookup
+            const updatedItemsMap = new Map(updatedItems.map(item => [item._id, item]));
+            setMenuItems(prevItems =>
+                prevItems.map(item =>
+                    updatedItemsMap.has(item._id) ? updatedItemsMap.get(item._id)! : item
+                )
+            );
+            setSelectedItems([]); // Clear selected items after bulk toggle
+        });
+
+        // Event listener for bulk category change
+        socket.on('menuItemBulkCategoryChanged', (updatedItems: MenuItem[]) => {
+            console.log('Socket: Bulk menu items category changed:', updatedItems);
+            const updatedItemsMap = new Map(updatedItems.map(item => [item._id, item]));
+            setMenuItems(prevItems =>
+                prevItems.map(item =>
+                    updatedItemsMap.has(item._id) ? updatedItemsMap.get(item._id)! : item
+                )
+            );
+            setSelectedItems([]); // Clear selected items after bulk category change
+        });
+
+
+        // Clean up on component unmount - remove listeners specifically
+        return () => {
+            socket.off('newMenuItem');
+            socket.off('menuItemUpdated');
+            socket.off('menuItemToggled');
+            socket.off('menuItemDeleted');
+            socket.off('menuItemBulkDeleted');
+            socket.off('menuItemBulkToggled');
+            socket.off('menuItemBulkCategoryChanged');
+            // Do NOT call socket.disconnect() here, as it's a shared instance.
+            // Disconnect should only happen when the entire app decides to shut down the connection.
+        };
+    }, [fetchMenuItems, fetchCategories]);
 
     useEffect(() => {
     setCurrentPage(1); // reset to first page when filters/search changes
@@ -145,8 +223,7 @@ export default function AdminMenuContent() {
 
             if (!res.ok) throw new Error('Failed to add item');
 
-            const newItem = await res.json();
-            setMenuItems([...menuItems, newItem]);
+            
             setForm({ name: '', price: '', category: '', available: true});
             setImageFile(null);
             setImagePreview(null);
@@ -184,12 +261,6 @@ export default function AdminMenuContent() {
 
             if (!res.ok) throw new Error('Failed to update item');
 
-            const updatedItem = await res.json();
-
-            setMenuItems(menuItems.map(item => 
-                item._id === editingId ? updatedItem : item 
-            ));
-
             setEditingId(null);
             setForm({ name: '', price: '', category: '', available: true });    
             setImageFile(null);
@@ -210,7 +281,6 @@ export default function AdminMenuContent() {
 
             if (!res.ok) throw new Error('Failed to delete item');
 
-            setMenuItems(menuItems.filter(item => item._id !== id));
         } catch (err) {
             setError('Error deleting item');
             console.error('Error deleting items:', err);
@@ -220,16 +290,6 @@ export default function AdminMenuContent() {
     //Toogle item availability
     const handleToggleAvailability = async (id: string) => {
         try {
-            //Update UI optimistically
-            const updatedItems = menuItems.map(item => 
-                item._id === id ? { 
-
-                    ...item,
-                    available : !item.available } : item
-                
-            );
-            setMenuItems(updatedItems);
-
             //Make API call to persist change
             const res = await fetch(`${API_URL}/${id}/toggle`, {
                 method: 'PATCH',
@@ -237,8 +297,6 @@ export default function AdminMenuContent() {
 
             if (!res.ok) {
                 throw new Error('Failed to update availability');
-                //If API call fails, revert UI change by re-fetching data
-                fetchMenuItems();
             }
         } catch (err) {
             setError('Error updating availability');
@@ -279,8 +337,6 @@ export default function AdminMenuContent() {
 
             if (!res.ok) throw new Error('Failed to delete selected items');
             
-            setMenuItems((prev) => prev.filter(item => !selectedItems.includes(item._id)));
-            setSelectedItems([]);
         } catch (error) {
             setError('Error deleting selected items');
             console.error('Error deleting selected items:', error);
@@ -298,8 +354,6 @@ export default function AdminMenuContent() {
             });
             if (!res.ok) throw new Error('Failed to toggle availability');
             
-            fetchMenuItems(); // Re-fetch data after bulk update
-            setSelectedItems([]);
         } catch (err) {
             setError('Error updating availability for selected items');
             console.error('Error updating availability for selected items:', err);
@@ -321,8 +375,6 @@ export default function AdminMenuContent() {
 
             if(!res.ok) throw new Error('Failed to update category');
 
-            fetchMenuItems(); // Re-fetch data after bulk update
-            setSelectedItems([]);
         } catch (err) {
             setError('Error updating category for selected items');
             console.error('Error changing category for selected items:', err);
@@ -368,17 +420,24 @@ export default function AdminMenuContent() {
         });
     };
 
-    return (
-        <div className={styles.adminContainer}>
-            <h1 className={styles.title}>Menu Management</h1>
+     return (
+        // Replaced styles.adminContainer with Tailwind classes
+        <div className="p-5 max-w-6xl mx-auto my-5 bg-white rounded-xl shadow-lg">
+            {/* Replaced styles.title with Tailwind classes */}
+            <h1 className="text-center text-gray-800 mb-8 text-4xl font-bold">Menu Management</h1>
             
-            {error && <div className={styles.error}>{error}</div>}
+            {/* Replaced styles.error with Tailwind classes */}
+            {error && <div className="bg-red-100 text-red-700 p-4 rounded-lg mb-5 border border-red-200">{error}</div>}
             
-            <form className={styles.form} onSubmit={editingId ? handleUpdate : handleAdd}>
-                <h2>{editingId ? 'Edit Menu Item' : 'Add New Menu Item'}</h2>
+            {/* Replaced styles.form with Tailwind classes */}
+            <form className="bg-gray-50 p-6 rounded-xl mb-8 shadow-md" onSubmit={editingId ? handleUpdate : handleAdd}>
+                {/* Applied Tailwind classes directly to h2 */}
+                <h2 className="text-2xl text-gray-800 mb-5 text-center">{editingId ? 'Edit Menu Item' : 'Add New Menu Item'}</h2>
                 
-                <div className={styles.formGroup}>
-                    <label htmlFor="name">Item Name:</label>
+                {/* Replaced styles.formGroup with Tailwind classes for all form groups */}
+                <div className="mb-4">
+                    {/* Applied Tailwind classes directly to label and input */}
+                    <label htmlFor="name" className="block mb-2 font-medium text-gray-600">Item Name:</label>
                     <input 
                         id="name"
                         name="name" 
@@ -386,11 +445,12 @@ export default function AdminMenuContent() {
                         value={form.name} 
                         onChange={updateForm}
                         required
+                        className="w-full py-2.5 px-3 border border-gray-300 rounded-md text-base focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
                     />
                 </div>
                 
-                <div className={styles.formGroup}>
-                    <label htmlFor="price">Price ($):</label>
+                <div className="mb-4">
+                    <label htmlFor="price" className="block mb-2 font-medium text-gray-600">Price ($):</label>
                     <input 
                         id="price"
                         name="price" 
@@ -401,17 +461,20 @@ export default function AdminMenuContent() {
                         value={form.price} 
                         onChange={updateForm}
                         required
+                        className="w-full py-2.5 px-3 border border-gray-300 rounded-md text-base focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
                     />
                 </div>
                 
-                <div className={styles.formGroup}>
-                    <label htmlFor="category">Category:</label>
+                <div className="mb-4">
+                    <label htmlFor="category" className="block mb-2 font-medium text-gray-600">Category:</label>
                     <select
                         id="category"
                         name="category"
                         value={form.category}
                         onChange={updateForm}
                         required
+                        className="w-full py-2.5 px-3 border border-gray-300 rounded-md text-base focus:border-blue-500 focus:outline-none
+                        focus:ring-2 focus:ring-blue-200]"
                     >
                         <option value="">Select Category</option>
                         {categories.map((category) => (
@@ -419,47 +482,55 @@ export default function AdminMenuContent() {
                                 {category.name}
                             </option>
                         ))}
-                    </select>                 
+                    </select>                
                 </div>
                 
-                <div className={styles.formGroup}>
-                    <label htmlFor="image">Item Image:</label>
+                <div className="mb-4">
+                    <label htmlFor="image" className="block mb-2 font-medium text-gray-600">Item Image:</label>
                     <input 
                         id="image"
                         name="image"
                         type="file"
                         accept="image/*"
                         onChange={handleImageChange}
+                        className="w-full py-2.5 px-3 border border-gray-300 rounded-md text-base file:mr-4 file:py-2 file:px-4
+                                   file:rounded-md file:border-0 file:text-sm file:font-semibold
+                                   file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100" // Tailwind for file input styling
                     />
                     {imagePreview && (
-                        <div className={styles.imagePreview}>
+                        // Replaced styles.imagePreview and styles.previewImage with Tailwind classes
+                        <div className="mt-2.5 text-center">
                             <img 
                                 src={imagePreview} 
                                 alt="Preview" 
                                 width="100"
-                                className={styles.previewImage} 
+                                className="max-w-[100px] h-auto rounded border border-gray-200 inline-block" // Added inline-block to center
                             />
                         </div>
                     )}
                 </div>
                 
-                <div className={tooglestyles.formGroup}>
+                {/* Replaced tooglestyles.formGroup with common form group class */}
+                <div className="mb-4">
                     <ToggleSwitch
-                         checked={form.available}
-                         onChange={(checked) => setForm({ ...form, available: checked })}
-                         label="Available"
+                        checked={form.available}
+                        onChange={(checked) => setForm({ ...form, available: checked })}
+                        label="Available"
                     />
                 </div>
                 
-                <div className={styles.formActions}>
-                    <button type="submit" className={styles.primaryButton}>
+                {/* Replaced styles.formActions with Tailwind classes */}
+                <div className="flex justify-end gap-4 mt-5">
+                    {/* Replaced styles.primaryButton with Tailwind classes */}
+                    <button type="submit" className="py-2.5 px-5 bg-green-600 text-white rounded-md cursor-pointer text-base transition-colors duration-200 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-300 focus:ring-opacity-50">
                         {editingId ? 'Update Item' : 'Add Item'}
                     </button>
                     
                     {editingId && (
+                        // Replaced styles.secondaryButton with Tailwind classes
                         <button 
                             type="button" 
-                            className={styles.secondaryButton} 
+                            className="py-2.5 px-5 bg-gray-500 text-white rounded-md cursor-pointer text-base transition-colors duration-200 hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-gray-300 focus:ring-opacity-50" 
                             onClick={handleCancel}
                         >
                             Cancel
@@ -468,34 +539,35 @@ export default function AdminMenuContent() {
                 </div>
             </form>
 
-            <div className={styles.menuList}>
-                <h2>Menu Items</h2>
+            {/* Replaced styles.menuList with Tailwind classes */}
+            <div className="mt-10">
+                {/* Applied Tailwind classes directly to h2 */}
+                <h2 className="text-3xl text-gray-800 mb-6 text-center">Menu Items</h2>
 
-                <div className={styles.searchContainer}>
-                    <SearchBar
-                        searchQuery={searchQuery}
-                        onSearchChange={setSearchQuery}
-                    />
-                </div>
+                {/* The SearchBar component already handles its own container styling */}
+                <SearchBar
+                    searchQuery={searchQuery}
+                    onSearchChange={setSearchQuery}
+                />
                 <FilterBar
-                        categories={categories}
-                        selectedCategory={selectedCategory}
-                        onCategoryChange={setSelectedCategory}
-                        selectedAvailability={selectedAvailability}
-                        onAvailabilityChange={setSelectedAvailability}
-                    />
+                    categories={categories}
+                    selectedCategory={selectedCategory}
+                    onCategoryChange={setSelectedCategory}
+                    selectedAvailability={selectedAvailability}
+                    onAvailabilityChange={setSelectedAvailability}
+                />
 
-                    {/* Bulk Action Bar */}
-                    <BulkActionBar
-                       selectedIds={selectedItems}
-                        onDeleteSelected={handleDeleteSelected}
-                        onToggleAvailabilitySelected={handleToggleAvailabilitySelected}
-                        onChangeCategory={handleChangeCategory}
-                        categories={categories.map(c => c.name)}
-                    />
+                {/* Bulk Action Bar - This component has not been converted yet. */}
+                <BulkActionBar
+                    selectedIds={selectedItems}
+                    onDeleteSelected={handleDeleteSelected}
+                    onToggleAvailabilitySelected={handleToggleAvailabilitySelected}
+                    onChangeCategory={handleChangeCategory}
+                    categories={categories.map(c => c.name)}
+                />
                 
                 {isLoading ? (
-                    <p>Loading menu items...</p>
+                    <p className="text-center py-4 text-gray-600">Loading menu items...</p>
                 ) : (
                     <MenuItemTable 
                         items={currentItems} 
@@ -506,20 +578,19 @@ export default function AdminMenuContent() {
                         onSelectAll={handleSelectAll}
                         selectedItems={selectedItems}
                     />
-                  )}
+                )}
 
-                  {totalPages > 0 && (
-                    <div className={styles.paginationWrapper}>
+                {totalPages > 0 && (
+                    // Replaced styles.paginationWrapper with Tailwind classes
+                    <div className="flex justify-center mt-6">
                         <SimplePagination
                             currentPage={currentPage}
                             totalPages={totalPages}
                             onPageChange={handlePageChange}
                         />
-
                     </div>
-
-                  )}
-                </div>
+                )}
+            </div>
         </div>
     );
 }

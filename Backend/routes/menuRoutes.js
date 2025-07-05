@@ -164,7 +164,7 @@ router.patch('/toggle', async (req, res) => {
         }
 
         // Toggle availability for each item
-        const bulkOps = items.map(item => ({
+        const bulkOps = itemsToToggle.map(item => ({
             updateOne: {
               filter: { _id: item._id },
               update: { available: !item.available }

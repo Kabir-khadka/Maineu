@@ -26,7 +26,7 @@ module.exports = (io) => { // This is correct: the entire module exports a funct
             await category.save();
 
             // Emit a Socket.IO event for a new category
-            io.emit('categoryCreated', category); // Correct use of io
+            io.emit('newCategoryAdded', category); // Correct use of io
 
             res.status(201).json(category);
         } catch (err) {
@@ -64,10 +64,11 @@ module.exports = (io) => { // This is correct: the entire module exports a funct
             if (!category) return res.status(404).json({ message: 'Category not found' });
 
             // Emitting a Socket.IO event for a deleted category
-            io.emit('categoryDeleted', { categoryId: id }); // Correct use of io
+            io.emit('categoryRemoved', { _id: id, name: category.name }); // Correct use of io
 
             res.json({ message: 'Category deleted successfully' });
         } catch (err) {
+            console.error('Error deleting category:', err);
             res.status(500).json({ message: 'Server Error', error: err.message });
         }
     };
