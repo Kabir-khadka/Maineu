@@ -1,6 +1,6 @@
 const mongoose = require('mongoose');
 
-const orderItemSchema = new mongoose.Schema({
+const orderEntrySchema = new mongoose.Schema({
     name: { type:String, required: true },
     quantity: { type: Number, required: true },
     price: { type: Number, required: true },
@@ -9,7 +9,7 @@ const orderItemSchema = new mongoose.Schema({
 
 const orderSchema = new mongoose.Schema({
     tableNumber: { type: String, required: true },
-    orderItems: { type: [orderItemSchema], required: true },
+    orderItems: { type: [orderEntrySchema], required: true },
     totalPrice: { type: Number, required: true },
     status: { 
         type: String,
