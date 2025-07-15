@@ -4,7 +4,7 @@ import React, { useEffect, useState } from 'react';
 import TableCard from './TableCard';
 import {Order, OrderItem} from '@/types/order';
 import OrderDetailSidebar from './OrderDetailSidebar';
-import socket from '@/lib/socket';
+import socket from '@/lib/socket'; // Correctly import the socket client instance
 
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL;
@@ -21,7 +21,7 @@ export default function AdminOrdersContent() {
             try {
                 const res = await fetch(`${BACKEND_URL}/api/orders`);
                 const data = await res.json();
-                setOrders(data);
+                setOrders(data); // `data` will now be an array of single-item orders
             } catch (err) {
                 console.error('Error fetching orders:', err);
             } finally {
@@ -32,17 +32,17 @@ export default function AdminOrdersContent() {
         fetchOrders();
 
         //Adding Socket.IO Listeners
-    socket.on('newOrder', (newOrder: Order) => {
-        console.log('Socket: Recieved newOrder', newOrder);
-        setOrders(prevOrders => [...prevOrders, newOrder]); // Add new order to state
-        //If the sidebar is open and the new order belongs to the currently viewed table,
-        //update selectedOrders as well
-        if (showSidebar && selectedOrders && newOrder.tableNumber === selectedOrders[0]?.tableNumber) {
-            setSelectedOrder(prevSelected => [...(prevSelected || []), newOrder]);
-        }
-    });
+        socket.on('newOrder', (newOrder: Order) => {
+            console.log('Socket: Received newOrder', newOrder);
+            setOrders(prevOrders => [...prevOrders, newOrder]); // Add new order to state
+            // If the sidebar is open and the new order belongs to the currently viewed table,
+            // update selectedOrders as well
+            if (showSidebar && selectedOrders && newOrder.tableNumber === selectedOrders[0]?.tableNumber) {
+                setSelectedOrder(prevSelected => [...(prevSelected || []), newOrder]);
+            }
+        });
 
-    socket.on('orderUpdated', (updatedOrder: Order) => { // <--- ADDED: Listener for orderUpdated
+        socket.on('orderUpdated', (updatedOrder: Order) => {
             console.log('Socket: Received orderUpdated', updatedOrder);
             setOrders(prevOrders =>
                 prevOrders.map(order =>
@@ -59,59 +59,60 @@ export default function AdminOrdersContent() {
             }
         });
 
-    socket.on('orderStatusUpdated', (updatedOrder: Order) => {
-        console.log('Socket: Received orderStatusUpdated', updatedOrder);
-        setOrders(prevOrders => 
-            prevOrders.map(order => 
-                order._id === updatedOrder._id ? updatedOrder : order
-            )
-        );
-
-        // Also update selectedOrders if the sidebar is open and this order is part of it
-        if (showSidebar && selectedOrders?.some(o => o._id ===updatedOrder._id)) {
-            setSelectedOrder(prevSelected => 
-                prevSelected!.map(order =>
+        socket.on('orderStatusUpdated', (updatedOrder: Order) => {
+            console.log('Socket: Received orderStatusUpdated', updatedOrder);
+            setOrders(prevOrders => 
+                prevOrders.map(order => 
                     order._id === updatedOrder._id ? updatedOrder : order
                 )
             );
-        }
-    });
 
-    socket.on('ordersBulkToggled', (updatedOrders: Order[]) => {
+            // Also update selectedOrders if the sidebar is open and this order is part of it
+            if (showSidebar && selectedOrders?.some(o => o._id ===updatedOrder._id)) {
+                setSelectedOrder(prevSelected => 
+                    prevSelected!.map(order =>
+                        order._id === updatedOrder._id ? updatedOrder : order
+                    )
+                );
+            }
+        });
+
+        // This listener expects an array of updated orders
+        socket.on('ordersBulkToggled', (updatedOrders: Order[]) => {
             console.log('Socket: Received ordersBulkToggled', updatedOrders);
             setOrders(prevOrders => {
-                // Create a map for quick lookup of updated orders by ID
                 const updatedOrdersMap = new Map(updatedOrders.map(order => [order._id, order]));
                 return prevOrders.map(order => updatedOrdersMap.get(order._id) || order);
             });
 
-             if (showSidebar && selectedOrders && updatedOrders.some(uo => selectedOrders.some(so => so._id === uo._id))) {
+            if (showSidebar && selectedOrders && updatedOrders.some(uo => selectedOrders.some(so => so._id === uo._id))) {
                 setSelectedOrder(prevSelected => {
                     const updatedSelectedMap = new Map(updatedOrders.map(order => [order._id, order]));
                     return prevSelected!.map(order => updatedSelectedMap.get(order._id) || order);
                 });
             }
-    });
+        });
 
-    socket.on('orderArchived', ({ _id }: { _id: string }) => {
+        socket.on('orderArchived', ({ _id }: { _id: string }) => {
             console.log('Socket: Received orderArchived for ID:', _id);
             setOrders(prevOrders => prevOrders.filter(order => order._id !== _id));
             // If the archived order was selected in the sidebar, close the sidebar
             if (selectedOrders?.some(o => o._id === _id)) {
                 handleCloseSidebar();
             }
-    });
+        });
 
+        // This listener expects an array of archived IDs
         socket.on('ordersBulkArchived', ({ archivedIds }: { archivedIds: string[] }) => {
             console.log('Socket: Received ordersBulkArchived for IDs:', archivedIds);
             setOrders(prevOrders => prevOrders.filter(order => !archivedIds.includes(order._id)));
-             // If any of the archived orders were selected in the sidebar, close the sidebar
+            // If any of the archived orders were selected in the sidebar, close the sidebar
             if (selectedOrders && archivedIds.some(id => selectedOrders.some(so => so._id === id))) {
                 handleCloseSidebar();
             }
-    });
+        });
 
-    // Clean up socket listeners on component unmount
+        // Clean up socket listeners on component unmount
         return () => {
             socket.off('newOrder');
             socket.off('orderUpdated');
@@ -120,8 +121,7 @@ export default function AdminOrdersContent() {
             socket.off('orderArchived');
             socket.off('ordersBulkArchived');
         };
-    }, [showSidebar, selectedOrders]); // Dependencies: Re-run if sidebar or selectedOrders change to update logic.
-  
+    }, [showSidebar, selectedOrders]); 
 
     //Helper function to determine the aggregated display status for a given table based on its orders.
     //Prioritzes 'In progress', then 'Delivered', then 'Paid', and finally 'Cancelled'.
@@ -136,7 +136,6 @@ export default function AdminOrdersContent() {
         }
 
         //2. Check for 'Delivered' (next priority)
-        //Ensure no 'In progress' orders, at least one 'Delivered' order, and all others are 'Delivered', 'Paid', or 'Cancelled'.
         const anyAreDelivered = tableOrders.some(order => order.status === 'Delivered');
         const allOthersAreFinalOrDelivered = tableOrders.every(order => 
             order.status === 'Delivered' || order.status === 'Paid' || order.status === 'Cancelled'
@@ -147,7 +146,6 @@ export default function AdminOrdersContent() {
         }
 
         //3. Check for 'Paid' (next priority)
-        //Ensure no 'In progress' or 'Delivered' orders, at least one 'Paid' order, and all others are 'Paid' or 'Cancelled'.
         const anyArePaid = tableOrders.some(order => order.status === 'Paid'); 
         const allOthersArePaidOrCancelled = tableOrders.every(order =>
             order.status === 'Paid' || order.status === 'Cancelled'
@@ -204,20 +202,18 @@ export default function AdminOrdersContent() {
         setShowSidebar(false);
     }
 
-    // ✅ Function to update order status - handles single order or all table orders
+    // Function to update order status - now always updates individual orders
     const updateStatus = async (orderId: string, newStatus: 'Delivered' | 'Paid', tableOrders?: Order[]) => {
         // If updating multiple orders for a table (e.g., all to 'Paid')
         if (tableOrders && newStatus === 'Paid') {
-            // Filter out 'Cancelled' orders from the tableOrders array before checking conditions
             const nonCancelledTableOrders = tableOrders.filter(order => order.status !== 'Cancelled');
 
             const allDelivered = nonCancelledTableOrders.every(order => order.status === 'Delivered');
             
-            if (allDelivered && nonCancelledTableOrders.length > 0) { // Ensure there are non-cancelled orders to update
-                // Update all NON-CANCELLED orders for this table
+            if (allDelivered && nonCancelledTableOrders.length > 0) {
                 try {
                     const updatePromises = nonCancelledTableOrders.map(order => 
-                        fetch(`${BACKEND_URL}/api/orders/${order._id}/status`, { // Use BACKEND_URL
+                        fetch(`${BACKEND_URL}/api/orders/${order._id}/status`, {
                             method: 'PATCH',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({ status: newStatus }),
@@ -225,20 +221,21 @@ export default function AdminOrdersContent() {
                     );
 
                     const responses = await Promise.all(updatePromises);
-                    const updatedOrders = await Promise.all(
-                        responses.map(res => res.ok ? res.json() : null)
-                    );
+                    const updatedOrders: Order[] = [];
+                    for (const res of responses) {
+                        if (res.ok) {
+                            updatedOrders.push(await res.json());
+                        } else {
+                            console.error('Failed to update status for one order:', res.status, res.statusText);
+                        }
+                    }
 
-                    // Update state with all updated orders
-                    setOrders((prev) =>
-                        prev.map((order) => {
-                            const updatedOrder = updatedOrders.find(updated => 
-                                updated && updated._id === order._id
-                            );
-                            return updatedOrder || order;
-                        })
-                    );
-
+                    // --- FIX START ---
+                    // Use the client-side 'socket' instance, not 'io'
+                    if (updatedOrders.length > 0) {
+                        socket.emit('ordersBulkToggled', updatedOrders); 
+                    }
+                    // --- FIX END ---
                 } catch (err) {
                     console.error('Error updating multiple orders:', err);
                 }
@@ -246,25 +243,21 @@ export default function AdminOrdersContent() {
             }
         }
 
-        // Single order update (original logic)
-        // Ensure the single order is not 'Cancelled' before attempting to update
+        // Single order update (or if bulk conditions not met)
         const orderToUpdate = orders.find(order => order._id === orderId);
         if (orderToUpdate && orderToUpdate.status === 'Cancelled') {
             console.warn(`Attempted to update a cancelled order (${orderId}). Action blocked.`);
-            return; // Block update if the specific order is cancelled
+            return;
         }
 
         try {
-            const res = await fetch(`${BACKEND_URL}/api/orders/${orderId}/status`, { // Use BACKEND_URL
+            const res = await fetch(`${BACKEND_URL}/api/orders/${orderId}/status`, {
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ status: newStatus }),
             });
             if (res.ok) {
-                const updatedOrder = await res.json();
-                {/*setOrders((prev) =>
-                    prev.map((order) => (order._id === orderId ? updatedOrder : order))
-                );*/} // This will be updated by the socket.on('orderStatusUpdated') listener
+                await res.json();
             } else {
                 console.error('Failed to update order status');
             }
@@ -273,40 +266,38 @@ export default function AdminOrdersContent() {
         }
     };
 
-    // Function to revert order statuses
+    // Function to revert order statuses - now always reverts individual orders
     const revertStatus = async (orderId: string, tableOrders?: Order[]) => {
-        // If reverting multiple orders for a table
+        // If tableOrders are provided, it means we're trying to revert ALL orders for a table
         if (tableOrders) {
-            // Filter out 'Cancelled' orders from the tableOrders array before checking conditions
             const nonCancelledTableOrders = tableOrders.filter(order => order.status !== 'Cancelled');
-
             const allDelivered = nonCancelledTableOrders.every(order => order.status === 'Delivered');
             const allPaid = nonCancelledTableOrders.every(order => order.status === 'Paid');
 
-            if ((allDelivered || allPaid) && nonCancelledTableOrders.length > 0) { // Ensure there are non-cancelled orders to revert
-                // Revert all NON-CANCELLED orders for this table
+            if ((allDelivered || allPaid) && nonCancelledTableOrders.length > 0) {
                 try {
                     const revertPromises = nonCancelledTableOrders.map(order => 
-                        fetch(`${BACKEND_URL}/api/orders/${order._id}/revert-status`, { // Use BACKEND_URL
+                        fetch(`${BACKEND_URL}/api/orders/${order._id}/revert-status`, {
                             method: 'PATCH',
                         })
                     );
 
                     const responses = await Promise.all(revertPromises);
-                    const updatedOrders = await Promise.all(
-                        responses.map(res => res.ok ? res.json() : null)
-                    );
+                    const updatedOrders: Order[] = [];
+                    for (const res of responses) {
+                        if (res.ok) {
+                            updatedOrders.push(await res.json());
+                        } else {
+                            console.error('Failed to revert status for one order:', res.status, res.statusText);
+                        }
+                    }
 
-                    // Update state with all reverted orders
-                    setOrders((prev) =>
-                        prev.map((order) => {
-                            const updatedOrder = updatedOrders.find(updated => 
-                                updated && updated._id === order._id
-                            );
-                            return updatedOrder || order;
-                        })
-                    );
-
+                    // --- FIX START ---
+                    // Use the client-side 'socket' instance, not 'io'
+                    if (updatedOrders.length > 0) {
+                        socket.emit('ordersBulkToggled', updatedOrders); 
+                    }
+                    // --- FIX END ---
                 } catch (err) {
                     console.error('Error reverting multiple orders:', err);
                 }
@@ -314,23 +305,19 @@ export default function AdminOrdersContent() {
             }
         }
 
-        // Single order revert (original logic)
-        // Ensure the single order is not 'Cancelled' before attempting to revert
+        // Single order revert (or if bulk conditions not met)
         const orderToRevert = orders.find(order => order._id === orderId);
         if (orderToRevert && orderToRevert.status === 'Cancelled') {
             console.warn(`Attempted to revert a cancelled order (${orderId}). Action blocked.`);
-            return; // Block revert if the specific order is cancelled
+            return;
         }
 
         try {
-            const res = await fetch(`${BACKEND_URL}/api/orders/${orderId}/revert-status`, { // Use BACKEND_URL
+            const res = await fetch(`${BACKEND_URL}/api/orders/${orderId}/revert-status`, {
                 method: 'PATCH',
             });
             if (res.ok) {
-                const updatedOrder = await res.json();
-                {/*setOrders((prev) => 
-                    prev.map((order) => (order._id === orderId ? updatedOrder : order))
-                );*/} // This will be updated by the socket.on('orderStatusUpdated') listener
+                await res.json();
             } else {
                 console.error('Failed to revert status');
             }
@@ -340,34 +327,68 @@ export default function AdminOrdersContent() {
     };
 
     const archiveOrder = async (orderId: string, tableOrders?: Order[]) => {
-        if (!confirm('Are you sure you want to archive this order?')) return;
+        // Using a custom message box instead of confirm()
+        const confirmArchive = await new Promise<boolean>((resolve) => {
+            const messageBox = document.createElement('div');
+            messageBox.className = 'fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50';
+            messageBox.innerHTML = `
+                <div class="bg-white p-6 rounded-lg shadow-xl text-center">
+                    <p class="text-lg font-semibold mb-4">Are you sure you want to archive this order?</p>
+                    <div class="flex justify-center gap-4">
+                        <button id="cancelArchive" class="bg-gray-300 text-gray-800 px-4 py-2 rounded-md hover:bg-gray-400">Cancel</button>
+                        <button id="confirmArchive" class="bg-red-500 text-white px-4 py-2 rounded-md hover:bg-red-600">Archive</button>
+                    </div>
+                </div>
+            `;
+            document.body.appendChild(messageBox);
 
-        // If all orders are "Paid", archive all orders for this table
-        // We generally wouldn't archive if there are cancelled orders mixed in,
-        // unless the intent is to clear ALL orders for a table regardless of their state once all *paid* ones are paid.
-        // For now, let's keep the logic to only archive if all are paid.
+            document.getElementById('confirmArchive')?.addEventListener('click', () => {
+                document.body.removeChild(messageBox);
+                resolve(true);
+            });
+            document.getElementById('cancelArchive')?.addEventListener('click', () => {
+                document.body.removeChild(messageBox);
+                resolve(false);
+            });
+        });
+
+        if (!confirmArchive) return;
+
+        // If all orders for the table are 'Paid' or 'Cancelled', archive all of them
         if (tableOrders) {
-            const allPaid = tableOrders.every(order => order.status === 'Paid');
+            const allPaidOrCancelled = tableOrders.every(order => order.status === 'Paid' || order.status === 'Cancelled');
             
-            if (allPaid) { // Only proceed if ALL orders for the table are Paid
+            if (allPaidOrCancelled && tableOrders.length > 0) {
                 try {
                     const deletePromises = tableOrders.map(order => 
-                        fetch(`${BACKEND_URL}/api/orders/${order._id}/archive`, { // Use BACKEND_URL
+                        fetch(`${BACKEND_URL}/api/orders/${order._id}/archive`, {
                             method: 'DELETE',
                         })
                     );
 
                     const responses = await Promise.all(deletePromises);
-                    const allSuccess = responses.every(res => res.ok);
-
-                    if (allSuccess) {
-                        {/*// Remove all orders for this table from state
-                        const orderIds = tableOrders.map(order => order._id);
-                        setOrders(prev => prev.filter(order => !orderIds.includes(order._id)));*/}
-                        // This will be updated by the socket.on('ordersBulkArchived') listener
-                    } else {
-                        console.error('Failed to archive some orders');
+                    const archivedIds: string[] = [];
+                    for (const res of responses) {
+                        if (res.ok) {
+                            // --- FIX START ---
+                            // Correctly get the _id from the original order in tableOrders
+                            // This assumes the DELETE request was for this specific order._id
+                            const originalOrder = tableOrders.find(o => o._id === res.url.split('/').pop()); // Extract ID from URL for robustness
+                            if (originalOrder) {
+                                archivedIds.push(originalOrder._id);
+                            }
+                            // --- FIX END ---
+                        } else {
+                            console.error('Failed to archive one order:', res.status, res.statusText);
+                        }
                     }
+
+                    // --- FIX START ---
+                    // Use the client-side 'socket' instance, not 'io'
+                    if (archivedIds.length > 0) {
+                        socket.emit('ordersBulkArchived', { archivedIds: archivedIds.filter(id => id !== '') });
+                    }
+                    // --- FIX END ---
                 } catch (err) {
                     console.error('Error archiving multiple orders:', err);
                 }
@@ -375,15 +396,14 @@ export default function AdminOrdersContent() {
             }
         }
 
-        // Single order archive (fallback)
+        // Single order archive (or if bulk conditions not met)
         try {
-            const res = await fetch(`${BACKEND_URL}/api/orders/${orderId}/archive`, { // Use BACKEND_URL
+            const res = await fetch(`${BACKEND_URL}/api/orders/${orderId}/archive`, {
                 method: 'DELETE',
             });
 
             if (res.ok) {
-                // This will be updated by the socket.on('orderArchived') listener
-                //setOrders(prev => prev.filter(order => order._id !== orderId));
+                // The socket.on('orderArchived') listener will handle state update
             } else {
                 console.error('Failed to archive order');
             }
@@ -417,10 +437,6 @@ export default function AdminOrdersContent() {
             ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                     {sortedTableGroups.map(([tableNumber, tableOrders]) => {
-                        // Getting the latest order or most relevant status for the table
-                        // IMPORTANT: The 'oldestOrder' here is used for button logic, not for the TableCard's overall status.
-                        // It's primarily used for passing an orderId to the update/revert functions,
-                        // and its status for initial button display checks.
                         const oldestOrder = tableOrders.reduce((oldest, current) => {
                            return (new Date(current.createdAt || '').getTime() < new Date(oldest.createdAt || '').getTime()) ? current : oldest;
                         });
@@ -454,11 +470,11 @@ export default function AdminOrdersContent() {
                                             Paid
                                         </button>
                                     )}
-                                    {/* Only show 'Delete' (Archive) button if the aggregated displayStatus is 'Paid' */}
-                                    {displayStatus === 'Paid' && (
+                                    {/* Only show 'Delete' (Archive) button if the aggregated displayStatus is 'Paid' or 'Cancelled' */}
+                                    {(displayStatus === 'Paid' || displayStatus === 'Cancelled') && (
                                         <button
                                             onClick={() => archiveOrder(oldestOrder._id, tableOrders)}
-                                            className="text-sm px-3 py-1 bg-red-300 rounded hover:bg-green-400 transition"
+                                            className="text-sm px-3 py-1 bg-red-300 rounded hover:bg-red-400 transition"
                                         >
                                             Delete
                                         </button>

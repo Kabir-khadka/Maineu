@@ -10,9 +10,11 @@ interface OrderContextType {
     increaseEntryQuantity: (entryId: string) => void;
     decreaseEntryQuantity: (entryId: string) => void;
     getNewlyAddedItems: () => OrderItem[];
-    getDecreasedOrRemovedItems: () => { name: string; quantityChange: number; price: number; }[];
-    getIncreasedConfirmedItems: () => { name: string; quantityChange: number; price: number }[]; // <-- Added this!
-    setInitialActiveOrders: (orders: Order[]) => void;
+    // --- FIX START: ADD 'orderId: string;' to these return types ---
+    getDecreasedOrRemovedItems: () => { name: string; quantityChange: number; price: number; orderId: string; }[];
+    getIncreasedConfirmedItems: () => { name: string; quantityChange: number; price: number; orderId: string; }[];
+    // --- FIX END ---
+    setInitialActiveOrders: (orders: Order[], shouldClearUnconfirmed?: boolean) => void;
     setActiveOrders: (orders: Order[]) => void;
     resetOrder: () => void;
     getTotalQuantityByName: (name: string) => number;
@@ -29,7 +31,7 @@ const OrderContext = createContext<OrderContextType>({
     decreaseEntryQuantity: () => {},
     getNewlyAddedItems: () => [],
     getDecreasedOrRemovedItems: () => [],
-    getIncreasedConfirmedItems: () => [], // <-- default
+    getIncreasedConfirmedItems: () => [],
     setInitialActiveOrders: () => {},
     setActiveOrders: () => {},
     resetOrder: () => {},
@@ -66,6 +68,7 @@ export const OrderProvider: React.FC<{children: React.ReactNode}> = ({ children 
                 aggregated[entry.name].quantity += entry.quantity;
             } else {
                 aggregated[entry.name] = {
+                    _id: entry.isConfirmed ? (activeOrders.find(ao => ao._id === entry.id)?.orderItems[0]?._id || '') : '',
                     name: entry.name,
                     price: entry.price,
                     quantity: entry.quantity
@@ -73,19 +76,20 @@ export const OrderProvider: React.FC<{children: React.ReactNode}> = ({ children 
             }
         });
         return Object.values(aggregated);
-    }, [orderEntries]);
+    }, [orderEntries, activeOrders]);
 
     // Aggregates confirmed items from activeOrders (for getting total confirmed state for diffing)
     const getAggregatedConfirmedItems = useCallback((): OrderItem[] => {
         const aggregated: {[name: string]: OrderItem} = {};
         activeOrders.forEach(order => {
-            order.orderItems.forEach(item => {
+            const item = order.orderItems[0];
+            if (item) {
                 if (aggregated[item.name]) {
                     aggregated[item.name].quantity += item.quantity;
                 } else {
                     aggregated[item.name] = {...item};
                 }
-            });
+            }
         });
         console.log("OrderContext: getAggregatedConfirmedItems called. Result:", Object.values(aggregated));
         return Object.values(aggregated);
@@ -97,12 +101,12 @@ export const OrderProvider: React.FC<{children: React.ReactNode}> = ({ children 
         if (quantity <= 0) return;
 
         const newEntry: OrderEntry = {
-            id: generateEntryId(), // Always a new unique ID for each batch
+            id: generateEntryId(),
             name,
             price,
             quantity,
             timestamp: Date.now(),
-            isConfirmed: false // New items are initially unconfirmed
+            isConfirmed: false
         };
         setOrderEntries(prevEntries => [...prevEntries, newEntry]);
         console.log("OrderContext: addOrderEntry - New entry added:", newEntry);
@@ -182,7 +186,7 @@ export const OrderProvider: React.FC<{children: React.ReactNode}> = ({ children 
             .reduce((total, entry) => total + entry.quantity, 0);
     }, [orderEntries]);
 
-    // getNewlyAddedItems - Returns individual UNCONFIRMED OrderEntry objects
+    // getNewlyAddedItems - Returns individual UNCONFIRMED OrderEntry objects as OrderItem format for backend POST
     const getNewlyAddedItems = useCallback((): OrderItem[] => {
         const newlyAddedItems: OrderItem[] = orderEntries
             .filter(entry => !entry.isConfirmed)
@@ -190,99 +194,127 @@ export const OrderProvider: React.FC<{children: React.ReactNode}> = ({ children 
                 name: entry.name,
                 price: entry.price,
                 quantity: entry.quantity
-            }));
-        console.log("OrderContext: getNewlyAddedItems called. Result (individual entries):", newlyAddedItems);
+            } as OrderItem));
+        console.log("OrderContext: getNewlyAddedItems called. Result (individual entries for POST):", newlyAddedItems);
         return newlyAddedItems;
     }, [orderEntries]);
 
     // getDecreasedOrRemovedItems - Compares current aggregated state vs confirmed aggregated state
-    const getDecreasedOrRemovedItems = useCallback((): { name: string; quantityChange: number; price: number; }[] => {
-        const currentAggregatedItems = getOrderItemsFromEntries();
-        const currentConfirmedState = getAggregatedConfirmedItems();
+    const getDecreasedOrRemovedItems = useCallback((): { name: string; quantityChange: number; price: number; orderId: string; }[] => {
+        const confirmedItemsMap = new Map<string, { quantity: number; price: number; orderId: string }>();
+        activeOrders.forEach(order => {
+            const item = order.orderItems[0];
+            if (item) {
+                confirmedItemsMap.set(order._id, { quantity: item.quantity, price: item.price, orderId: order._id });
+            }
+        });
 
-        const changedItems: { name: string; quantityChange: number; price: number; }[] = [];
+        const changedItems: { name: string; quantityChange: number; price: number; orderId: string; }[] = [];
 
-        currentConfirmedState.forEach(confirmedItem => {
-            const currentItem = currentAggregatedItems.find(c => c.name === confirmedItem.name);
-            if (!currentItem) {
-                changedItems.push({ name: confirmedItem.name, quantityChange: -confirmedItem.quantity, price: confirmedItem.price });
-            } else if (currentItem.quantity < confirmedItem.quantity) {
-                changedItems.push({ name: confirmedItem.name, quantityChange: currentItem.quantity - confirmedItem.quantity, price: currentItem.price });
+        confirmedItemsMap.forEach((confirmedItem, orderId) => {
+            const currentEntry = orderEntries.find(entry => entry.id === orderId && entry.isConfirmed);
+
+            if (!currentEntry) {
+                const originalOrder = activeOrders.find(o => o._id === orderId);
+                if (originalOrder && originalOrder.orderItems[0]) {
+                    changedItems.push({
+                        name: originalOrder.orderItems[0].name,
+                        quantityChange: -originalOrder.orderItems[0].quantity,
+                        price: originalOrder.orderItems[0].price,
+                        orderId: orderId
+                    });
+                }
+            } else if (currentEntry.quantity < confirmedItem.quantity) {
+                changedItems.push({
+                    name: currentEntry.name,
+                    quantityChange: currentEntry.quantity - confirmedItem.quantity,
+                    price: currentEntry.price,
+                    orderId: orderId
+                });
             }
         });
         console.log("OrderContext: getDecreasedOrRemovedItems called. Result:", changedItems);
         return changedItems;
-    }, [getOrderItemsFromEntries, getAggregatedConfirmedItems]);
+    }, [orderEntries, activeOrders]);
 
-    // --- NEW FUNCTION: getIncreasedConfirmedItems ---
-    const getIncreasedConfirmedItems = useCallback((): { name: string; quantityChange: number; price: number }[] => {
-        const currentAggregatedItems = getOrderItemsFromEntries();
-        const currentConfirmedState = getAggregatedConfirmedItems();
+    // getIncreasedConfirmedItems - For patching existing confirmed orders (increases in quantity)
+    const getIncreasedConfirmedItems = useCallback((): { name: string; quantityChange: number; price: number; orderId: string; }[] => {
+        const confirmedItemsMap = new Map<string, { quantity: number; price: number; }>();
+        activeOrders.forEach(order => {
+            const item = order.orderItems[0];
+            if (item) {
+                confirmedItemsMap.set(order._id, { quantity: item.quantity, price: item.price });
+            }
+        });
 
-        const changedItems: { name: string; quantityChange: number; price: number }[] = [];
+        const changedItems: { name: string; quantityChange: number; price: number; orderId: string }[] = [];
 
-        currentAggregatedItems.forEach(item => {
-            const confirmed = currentConfirmedState.find(c => c.name === item.name);
-            // If the item exists in the confirmed state and its current quantity is greater
-            // OR if the item is entirely new (not in confirmed state)
-            if (!confirmed || item.quantity > confirmed.quantity) {
-                const quantityChange = item.quantity - (confirmed?.quantity || 0);
-                // Only add if there's an actual increase
-                if (quantityChange > 0) {
+        orderEntries.forEach(entry => {
+            if (entry.isConfirmed) {
+                const confirmed = confirmedItemsMap.get(entry.id);
+                if (confirmed && entry.quantity > confirmed.quantity) {
+                    const quantityChange = entry.quantity - confirmed.quantity;
                     changedItems.push({
-                        name: item.name,
+                        name: entry.name,
                         quantityChange: quantityChange,
-                        price: item.price
+                        price: entry.price,
+                        orderId: entry.id
                     });
                 }
             }
         });
         console.log("OrderContext: getIncreasedConfirmedItems called. Result:", changedItems);
         return changedItems;
-    }, [getOrderItemsFromEntries, getAggregatedConfirmedItems]);
+    }, [orderEntries, activeOrders]);
 
 
-    // setInitialActiveOrders - Initializes activeOrders and reconciles orderEntries
-    const setInitialActiveOrders = useCallback((fetchedOrders: Order[]) => {
-        console.log("OrderContext: setInitialActiveOrders called with fetchedOrders:", fetchedOrders);
+    // setInitialActiveOrders to handle full synchronization
+    const setInitialActiveOrders = useCallback((fetchedOrders: Order[], shouldClearUnconfirmed: boolean = false) => {
+        console.log("OrderContext: setInitialActiveOrders called with fetchedOrders:", fetchedOrders, "shouldClearUnconfirmed:", shouldClearUnconfirmed);
+
         const sortedFetchedOrders = sortOrdersByCreatedAt(fetchedOrders);
         setActiveOrders(sortedFetchedOrders);
         console.log("OrderContext: setInitialActiveOrders - ActiveOrders after sorting:", sortedFetchedOrders);
 
         setOrderEntries(prevOrderEntries => {
-            const confirmedEntries: OrderEntry[] = [];
-            const confirmedItemNames: Set<string> = new Set(); // To track names of items that are now confirmed
+            const confirmedEntriesFromBackend: OrderEntry[] = [];
+            const backendConfirmedOrderItemIds = new Set<string>();
 
-            // Process fetched (confirmed) orders first
             fetchedOrders.forEach(order => {
-                order.orderItems.forEach(item => {
-                    const newConfirmedEntry: OrderEntry = {
-                        id: item._id || generateEntryId(), // Use backend _id if available, fallback to new ID
+                // Re-introduced: Access the single item in the order as per your confirmed model
+                const item = order.orderItems[0]; 
+                if (item && item._id) { // Ensure item and item._id exist
+                    confirmedEntriesFromBackend.push({
+                        id: item._id, // CRITICAL FIX: Use item._id for the OrderEntry's ID
                         name: item.name,
                         price: item.price,
                         quantity: item.quantity,
-                        timestamp: new Date(order.createdAt).getTime(), // Use order's creation time
+                        timestamp: new Date(order.createdAt).getTime(), // Use order's createdAt for consistency
                         isConfirmed: true
-                    };
-                    confirmedEntries.push(newConfirmedEntry);
-                    confirmedItemNames.add(item.name); // Mark this item name as confirmed
-                });
+                    });
+                    backendConfirmedOrderItemIds.add(item._id); // Add item's _id to the set
+                }
             });
+            console.log("OrderContext: setInitialActiveOrders - Confirmed entries from backend (flattened):", confirmedEntriesFromBackend);
 
-            // Filter out unconfirmed items that now have a confirmed counterpart
-            // Only keep unconfirmed items whose name is NOT in the confirmedItemNames set.
-            const remainingUnconfirmedItems = prevOrderEntries.filter(entry =>
-                !entry.isConfirmed && !confirmedItemNames.has(entry.name)
+            if (shouldClearUnconfirmed) {
+                console.log("OrderContext: setInitialActiveOrders - Performing full clear of unconfirmed entries due to `shouldClearUnconfirmed` flag.");
+                return confirmedEntriesFromBackend;
+            }
+
+            const unconfirmedEntriesToRetain = prevOrderEntries.filter(entry =>
+                !entry.isConfirmed && !backendConfirmedOrderItemIds.has(entry.id)
             );
-            console.log("OrderContext: setInitialActiveOrders - Retaining *remaining* unconfirmed items:", remainingUnconfirmedItems);
+            console.log("OrderContext: setInitialActiveOrders - Retaining unconfirmed entries:", unconfirmedEntriesToRetain);
 
-            // Combine confirmed entries from backend with remaining unconfirmed entries
-            const finalReconciledEntries = [...confirmedEntries, ...remainingUnconfirmedItems];
+            const finalReconciledEntries = [
+                ...confirmedEntriesFromBackend,
+                ...unconfirmedEntriesToRetain
+            ];
             console.log("OrderContext: setInitialActiveOrders - Final reconciled orderEntries (after sync):", finalReconciledEntries);
             return finalReconciledEntries;
         });
-    }, [sortOrdersByCreatedAt, generateEntryId]);
-
+    }, [sortOrdersByCreatedAt]);
 
     const setActiveOrdersOnly = useCallback((orders: Order[]) => {
         console.log("OrderContext: setActiveOrdersOnly called with orders:", orders);
@@ -297,47 +329,44 @@ export const OrderProvider: React.FC<{children: React.ReactNode}> = ({ children 
         setActiveOrders([]);
     }, []);
 
-    // New useCallback function for checking pending changes
+    // hasPendingChanges - Compares aggregated quantities of current vs confirmed states.
     const hasPendingChanges = useCallback((): boolean => {
-    // Aggregate current orderEntries for an overall view of desired state.
-    const currentAggregated: { [name: string]: { quantity: number; price: number; } } = {};
-    orderEntries.forEach(entry => {
-        if (currentAggregated[entry.name]) {
-            currentAggregated[entry.name].quantity += entry.quantity;
-        } else {
-            currentAggregated[entry.name] = { quantity: entry.quantity, price: entry.price };
-        }
-    });
-
-    // Aggregate activeOrders (confirmed state) for comparison.
-    const confirmedAggregated: { [name: string]: { quantity: number; price: number; } } = {};
-    activeOrders.forEach(order => {
-        order.orderItems.forEach(item => {
-            if (confirmedAggregated[item.name]) {
-                confirmedAggregated[item.name].quantity += item.quantity;
+        const currentAggregated: { [name: string]: { quantity: number; price: number; } } = {};
+        orderEntries.forEach(entry => {
+            if (currentAggregated[entry.name]) {
+                currentAggregated[entry.name].quantity += entry.quantity;
             } else {
-                confirmedAggregated[item.name] = { quantity: item.quantity, price: item.price };
+                currentAggregated[entry.name] = { quantity: entry.quantity, price: entry.price };
             }
         });
-    });
 
-    // Check for *any* discrepancy in quantities between current and confirmed states
-    // This covers both increases AND decreases on existing confirmed items.
-    const allItemNames = new Set([...Object.keys(currentAggregated), ...Object.keys(confirmedAggregated)]);
+        const confirmedAggregated: { [name: string]: { quantity: number; price: number; } } = {};
+        activeOrders.forEach(order => {
+            const item = order.orderItems[0];
+            if (item) {
+                if (confirmedAggregated[item.name]) {
+                    confirmedAggregated[item.name].quantity += item.quantity;
+                } else {
+                    confirmedAggregated[item.name] = { quantity: item.quantity, price: item.price };
+                }
+            }
+        });
 
-    for (const name of allItemNames) {
-        const currentQty = currentAggregated[name]?.quantity || 0;
-        const confirmedQty = confirmedAggregated[name]?.quantity || 0;
+        const allItemNames = new Set([...Object.keys(currentAggregated), ...Object.keys(confirmedAggregated)]);
 
-        if (currentQty !== confirmedQty) {
-            console.log(`OrderContext: hasPendingChanges - Detected quantity mismatch for ${name}: Current=${currentQty}, Confirmed=${confirmedQty}`);
-            return true; // Found a difference, so there are pending changes
+        for (const name of allItemNames) {
+            const currentQty = currentAggregated[name]?.quantity || 0;
+            const confirmedQty = confirmedAggregated[name]?.quantity || 0;
+
+            if (currentQty !== confirmedQty) {
+                console.log(`OrderContext: hasPendingChanges - Detected quantity mismatch for ${name}: Current=${currentQty}, Confirmed=${confirmedQty}`);
+                return true;
+            }
         }
-    }
 
-    console.log("OrderContext: hasPendingChanges - No quantity mismatches detected between current and confirmed states.");
-    return false; // If no discrepancies found after this comprehensive check.
-}, [orderEntries, activeOrders]);
+        console.log("OrderContext: hasPendingChanges - No quantity mismatches detected between current and confirmed states.");
+        return false;
+    }, [orderEntries, activeOrders]);
 
     return (
         <OrderContext.Provider value={{
@@ -350,7 +379,7 @@ export const OrderProvider: React.FC<{children: React.ReactNode}> = ({ children 
             decreaseEntryQuantity,
             getNewlyAddedItems,
             getDecreasedOrRemovedItems,
-            getIncreasedConfirmedItems, // <-- Exported here!
+            getIncreasedConfirmedItems,
             setInitialActiveOrders,
             setActiveOrders: setActiveOrdersOnly,
             resetOrder,
@@ -371,7 +400,9 @@ export const useOrder = () => {
             if (existingItem) {
                 existingItem.quantity += entry.quantity;
             } else {
+                const confirmedOrder = context.activeOrders.find(order => order._id === entry.id);
                 acc.push({
+                    _id: confirmedOrder ? confirmedOrder._id : '',
                     name: entry.name,
                     price: entry.price,
                     quantity: entry.quantity

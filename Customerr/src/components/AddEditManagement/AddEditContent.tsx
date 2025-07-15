@@ -6,6 +6,7 @@ import { useOrder } from '@/app/context/OrderContext';
 import FoodMenu from '../foodmenu';
 import BottomSheetLayout from '../Layout/BottomSheetLayout';
 import { Order, OrderItem, OrderEntry } from '@/types/order';
+import socket from '@/lib/socket';
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL;
 
@@ -29,6 +30,7 @@ export default function AddEditContent () {
     const [isConfirming, setIsConfirming] = useState(false);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const [refreshActiveOrdersTrigger, setRefreshActiveOrdersTrigger] = useState(0);
 
     const confirmedItems = orderEntries.filter(entry => entry.isConfirmed);
     const unconfirmedItems = orderEntries.filter(entry => !entry.isConfirmed);
@@ -71,7 +73,10 @@ export default function AddEditContent () {
                 const response = await fetch(`${BACKEND_URL}/api/orders/table/${storedTableNumber}/active`);
                 if(response.ok) {
                     const fetchedOrders: Order[] = await response.json();
-                    setInitialActiveOrders(fetchedOrders);
+                    // When re-fetching due to archive, we do NOT want to clear unconfirmed items
+                    // unless explicitly told to (e.g., after a successful confirm order).
+                    // So, shouldClearUnconfirmed is false here.
+                    setInitialActiveOrders(fetchedOrders, false);
                 } else {
                     if (response.status === 404) {
                         setInitialActiveOrders([]);
@@ -88,7 +93,23 @@ export default function AddEditContent () {
             }
         };
         fetchOrderData();
-    }, [router, setInitialActiveOrders, resetOrder, showMessageBox]);
+
+        //Socket.IO Listener for archived orders
+        const handleOrderArchived = ({ _id, tableNumber }: {_id: string; tableNumber: string }) => {
+            console.log('Socket: Received orderArchived for ID:', _id, 'Table:', tableNumber);
+            //Only refresh if the archived belong to the current table
+            if(tableNumber === storedTableNumber) {
+                setRefreshActiveOrdersTrigger(prev => prev + 1); // Trigger re-fetch
+            }
+        };
+
+        socket.on('orderArchived', handleOrderArchived);
+
+        //Cleaning up socket listener on component unmount
+        return () => {
+            socket.off('orderArchived', handleOrderArchived);
+        };
+    }, [router, setInitialActiveOrders, resetOrder, showMessageBox, refreshActiveOrdersTrigger]);
 
     // Helper to calculate total price
     const calculateTotalPrice = useCallback((items: (OrderItem | { price: number; quantity: number })[]): number => {
@@ -101,8 +122,10 @@ export default function AddEditContent () {
         setError(null);
 
         const storedTableNumber = localStorage.getItem('tableNumber');
+
         if (!storedTableNumber) {
-            showMessageBox("Table number not found in local storage!", () => {});
+            console.error('Table number not found. Cannot confirm order.');
+             showMessageBox("Table number not found! Please go back to the menu.");
             setIsConfirming(false);
             return;
         }
@@ -129,18 +152,25 @@ export default function AddEditContent () {
                     const errorData = await response.json();
                     throw new Error(`Failed to create new order: ${errorData.message || response.statusText}`);
                 }
+
+                const createdOrder: Order = await response.json();
+                console.log("AddEditContent: Newly added items confirmed successfully:", createdOrder);
+                socket.emit('newOrder', createdOrder);
+            } else {
+                console.log("AddEditContent: No new items to confirm.");
             }
 
             // PART 2: PATCH decreases/increases on existing orders
+            if (activeOrders.length > 0 ) {
             const patchPromises = activeOrders.map(async (originalActiveOrder) => {
                 // Find all entries for this order
                 const relevantEntriesForThisOrder = orderEntries.filter(entry =>
                     entry.isConfirmed && originalActiveOrder.orderItems.some(originalItem => originalItem._id === entry.id)
                 );
 
-                // Map back to OrderItem for PATCH
+                // Converting these relevant `OrderEntry` objects back to `OrderItem` structure for the backend.
                 const newOrderItemsForBackend: OrderItem[] = relevantEntriesForThisOrder.map(entry => ({
-                    _id: entry.id,
+                    _id: entry.id, // Use OrderEntry.id which is OrderItem._id for confirmed items
                     name: entry.name,
                     quantity: entry.quantity,
                     price: entry.price,
@@ -172,32 +202,47 @@ export default function AddEditContent () {
                         const errorData = await response.json();
                         throw new Error(`Failed to update order ${originalActiveOrder._id}: ${errorData.message || response.statusText}`);
                     }
-                    return await response.json();
+                    const updatedOrder = await response.json();
+                        console.log(`AddEditContent: Order ${originalActiveOrder._id} patched successfully.`, updatedOrder);
+                        // FIX: Emit socket event for updated order as a single object, not an array
+                        socket.emit('orderStatusUpdated', updatedOrder); 
+                        return updatedOrder; // Return updated order from backend
                 }
                 return null;
             });
 
-            await Promise.all(patchPromises);
+            // Execute all PATCH promises, filter out nulls (no changes)
+                const patchedResults = (await Promise.all(patchPromises)).filter(r => r !== null);
+                console.log("AddEditContent: All PATCH operations completed. Results:", patchedResults);
+            } else {
+                console.log("AddEditContent: No active orders to patch.");
+            }
 
-            // Refresh context from backend
+            // --- FINAL STEP: Refresh frontend state from backend ---
+            // After all POSTs and PATCHes, re-fetch all active orders to synchronize the state
             const updatedResponse = await fetch(`${BACKEND_URL}/api/orders/table/${storedTableNumber}/active`);
             if (!updatedResponse.ok) {
                 throw new Error(`HTTP error! status: ${updatedResponse.status} during final refresh`);
             }
             const updatedData: Order[] = await updatedResponse.json();
-            setInitialActiveOrders(updatedData);
 
+            // **** CRITICAL CHANGE: Pass 'true' to clear unconfirmed entries after successful sync ****
+            setInitialActiveOrders(updatedData, true);
+            console.log("AddEditContent: Frontend state refreshed after confirmation/updates, all unconfirmed cleared.");
+
+            // Display success message and navigate
             showMessageBox('Order changes confirmed successfully!', () => {
-                router.push('');
+                router.push('/addeditcustomerside'); // Always navigate to this page after confirmation
             });
 
         } catch (err: any) {
+            console.error("AddEditContent: Error during order confirmation:", err);
             showMessageBox(`Failed to confirm order: ${err.message || 'Unknown error'}. Please try again.`);
         } finally {
-            setIsConfirming(false);
+            setIsConfirming(false); // Re-enable button regardless of success or failure
         }
     }, [orderEntries, activeOrders, getNewlyAddedItems, setInitialActiveOrders, router, calculateTotalPrice, showMessageBox]);
-    // --- END: MyOrderPage's PATCH/POST logic ---
+    // --- END: MyOrderPage's handleConfirmOrder logic integrated ---
 
     const totalBill = orderItems.reduce(
         (total, item) => total + item.quantity * item.price,
@@ -357,7 +402,7 @@ export default function AddEditContent () {
                 <div className="flex justify-between py-4 mt-2.5 border-t-2 border-dashed border-gray-300 font-bold">
                     <span className='text-lg text-gray-800'>Total Amount</span>
                     <span className='text-lg text-[#F5BB49]'>${totalBill.toFixed(2)}</span>
-                </div>      
+                </div>      
             </div>
 
             <div className="flex flex-col items-center mt-4 w-full gap-4">
@@ -373,7 +418,7 @@ export default function AddEditContent () {
                         transition-all duration-200 ease-in-out hover:-translate-y-0.5 hover:shadow-lg
                         active:translate-y-0 active:shadow-md`}
                 >
-                    {isConfirming ? 'Confirming Changes...' : 'Confirm Order'}
+                    {isConfirming ? 'Confirming...' : 'Confirm Order'}
                 </button>
 
                 <button
