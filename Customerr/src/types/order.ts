@@ -3,7 +3,7 @@
 export interface OrderItem {
   // Crucial: Mongoose adds this _id to subdocuments once saved.
     // This _id will be the unique identifier for each *batch* once it's confirmed.
-  _id?: string; // Optional ID for the item, if needed
+   _id: string; // Optional ID for the item, if needed
     name: string;
     quantity: number;
     price: number;
