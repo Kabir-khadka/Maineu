@@ -20,11 +20,10 @@ const MyOrderPage: React.FC = () => {
         increaseEntryQuantity, // Use specific entry functions
         decreaseEntryQuantity,
         getNewlyAddedItems,
-        // getDecreasedOrRemovedItems, // No longer directly used in this refactored PATCH logic
-        // getIncreasedConfirmedItems, // No longer directly used in this refactored PATCH logic
         setInitialActiveOrders,
         resetOrder,
         hasPendingChanges,
+        cancelOrderEntry,
     } = useOrder();
 
     // ADD THESE DEBUG LOGS
@@ -37,6 +36,26 @@ const MyOrderPage: React.FC = () => {
 
     const [isLoading, setIsLoading] = useState(true);
     const [isConfirming, setIsConfirming] = useState(false); // Added to prevent double clicks
+    const [refreshActiveOrdersTrigger, setRefreshActiveOrdersTrigger] =useState(0);
+
+    const showMessageBox = useCallback((message: string, onConfirm?: () => void) => {
+        const messageBox = document.createElement('div');
+        messageBox.className = 'fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50';
+        messageBox.innerHTML = `
+            <div class="bg-white p-6 rounded-lg shadow-xl text-center">
+                <p class="text-lg font-semibold mb-4">${message}</p>
+                <button id="closeMessageBox" class="bg-blue-500 text-white px-4 py-2 rounded-md hover:bg-blue-600">OK</button>
+            </div>
+        `;
+        document.body.appendChild(messageBox);
+
+        document.getElementById('closeMessageBox')?.addEventListener('click', () => {
+            document.body.removeChild(messageBox);
+            if (onConfirm) {
+                onConfirm();
+            }
+        });
+    }, []);
 
     // Helper to calculate total price for a given set of items
     const calculateTotalPrice = (items: (OrderItem | { price: number; quantity: number })[]): number => {
@@ -52,19 +71,7 @@ const MyOrderPage: React.FC = () => {
         const storedTableNumber = localStorage.getItem('tableNumber');
         console.log('Stored Table Number:', storedTableNumber);
         if (!storedTableNumber) {
-            // Using a custom message box instead of alert()
-            const messageBox = document.createElement('div');
-            messageBox.className = 'fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50';
-            messageBox.innerHTML = `
-                <div class="bg-white p-6 rounded-lg shadow-xl text-center">
-                    <p class="text-lg font-semibold mb-4">Table number not found in session. Please select a table first.</p>
-                    <button id="closeMessageBox" class="bg-blue-500 text-white px-4 py-2 rounded-md hover:bg-blue-600">OK</button>
-                </div>
-            `;
-            document.body.appendChild(messageBox);
-
-            document.getElementById('closeMessageBox')?.addEventListener('click', () => {
-                document.body.removeChild(messageBox);
+            showMessageBox("Table number not found in session. Please select a table first.", () => {
                 router.push('/');
             });
             return;
@@ -88,36 +95,12 @@ const MyOrderPage: React.FC = () => {
 
                 } else {
                     console.error('Failed to fetch active orders:', response.status, response.statusText);
-                    const messageBox = document.createElement('div');
-                    messageBox.className = 'fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50';
-                    messageBox.innerHTML = `
-                        <div class="bg-white p-6 rounded-lg shadow-xl text-center">
-                            <p class="text-lg font-semibold mb-4">Error loading existing orders for your table.</p>
-                            <button id="closeMessageBox" class="bg-blue-500 text-white px-4 py-2 rounded-md hover:bg-blue-600">OK</button>
-                        </div>
-                    `;
-                    document.body.appendChild(messageBox);
-
-                    document.getElementById('closeMessageBox')?.addEventListener('click', () => {
-                        document.body.removeChild(messageBox);
-                    });
+                    showMessageBox('Error loading existing orders for your table.');
                     resetOrder();
                 }
             } catch (error) {
                 console.error('Network error fetching active orders:', error);
-                const messageBox = document.createElement('div');
-                messageBox.className = 'fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50';
-                messageBox.innerHTML = `
-                    <div class="bg-white p-6 rounded-lg shadow-xl text-center">
-                        <p class="text-lg font-semibold mb-4">Could not connect to server to load orders.</p>
-                        <button id="closeMessageBox" class="bg-blue-500 text-white px-4 py-2 rounded-md hover:bg-blue-600">OK</button>
-                    </div>
-                `;
-                document.body.appendChild(messageBox);
-
-                document.getElementById('closeMessageBox')?.addEventListener('click', () => {
-                    document.body.removeChild(messageBox);
-                });
+                showMessageBox('Could not connect to server to load orders.');
                 resetOrder();
             } finally {
                 setIsLoading(false);
@@ -125,7 +108,26 @@ const MyOrderPage: React.FC = () => {
         };
 
         fetchActiveOrders();
-    }, [router, setInitialActiveOrders, resetOrder]);
+
+         // --- NEW: Socket.IO Listener for order updates (including cancellation) ---
+        const handleOrderUpdated = (updatedOrder: Order) => {
+            console.log('Socket: Received orderUpdated for ID:', updatedOrder._id, 'Status:', updatedOrder.status);
+            const storedTableNumber = localStorage.getItem('tableNumber');
+            // Trigger re-fetch only if the updated order belongs to the current table
+            if (updatedOrder.tableNumber === storedTableNumber) {
+                setRefreshActiveOrdersTrigger(prev => prev + 1); // Trigger a re-fetch
+            }
+        };
+
+        socket.on('orderUpdated', handleOrderUpdated);
+        socket.on('orderStatusUpdated', handleOrderUpdated); // Also listen for status specific updates
+
+        // Clean up socket listener on component unmount
+        return () => {
+            socket.off('orderUpdated', handleOrderUpdated);
+            socket.off('orderStatusUpdated', handleOrderUpdated);
+        };
+    }, [router, setInitialActiveOrders, resetOrder, showMessageBox, refreshActiveOrdersTrigger]);
 
     const handleConfirmOrder = useCallback(async () => {
         setIsConfirming(true); // Disable button immediately to prevent multiple clicks
@@ -133,18 +135,7 @@ const MyOrderPage: React.FC = () => {
 
         if (!storedTableNumber) {
             console.error('Table number not found. Cannot confirm order.');
-            const messageBox = document.createElement('div');
-            messageBox.className = 'fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50';
-            messageBox.innerHTML = `
-                <div class="bg-white p-6 rounded-lg shadow-xl text-center">
-                    <p class="text-lg font-semibold mb-4">Table number not found! Please go back to the menu.</p>
-                    <button id="closeMessageBox" class="bg-blue-500 text-white px-4 py-2 rounded-md hover:bg-blue-600">OK</button>
-                </div>
-            `;
-            document.body.appendChild(messageBox);
-            document.getElementById('closeMessageBox')?.addEventListener('click', () => {
-                document.body.removeChild(messageBox);
-            });
+            showMessageBox("Table number not found! Please go back to the menu.");
             setIsConfirming(false); // Re-enable if an immediate error
             return;
         }
@@ -280,41 +271,35 @@ const MyOrderPage: React.FC = () => {
             console.log("MyOrderPage: Frontend state refreshed after confirmation/updates, all unconfirmed cleared.");
 
             // Display success message and navigate
-            const messageBox = document.createElement('div');
-            messageBox.className = 'fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50';
-            messageBox.innerHTML = `
-                <div class="bg-white p-6 rounded-lg shadow-xl text-center">
-                    <p class="text-lg font-semibold mb-4">Order changes confirmed successfully!</p>
-                    <button id="closeMessageBox" class="bg-blue-500 text-white px-4 py-2 rounded-md hover:bg-blue-600">OK</button>
-                </div>
-            `;
-            document.body.appendChild(messageBox);
-
-            document.getElementById('closeMessageBox')?.addEventListener('click', () => {
-                document.body.removeChild(messageBox);
+            showMessageBox('Order changes confirmed successfully!', () => {
                 router.push('/addeditcustomerside'); // Always navigate to this page after confirmation
             });
 
         } catch (err: any) {
             console.error("MyOrderPage: Error during order confirmation:", err);
             // Display error message
-            const messageBox = document.createElement('div');
-            messageBox.className = 'fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50';
-            messageBox.innerHTML = `
-                <div class="bg-white p-6 rounded-lg shadow-xl text-center">
-                    <p class="text-lg font-semibold mb-4">Failed to confirm order: ${err.message || 'Unknown error'}. Please try again.</p>
-                    <button id="closeMessageBox" class="bg-blue-500 text-white px-4 py-2 rounded-md hover:bg-blue-600">OK</button>
-                </div>
-            `;
-            document.body.appendChild(messageBox);
-
-            document.getElementById('closeMessageBox')?.addEventListener('click', () => {
-                document.body.removeChild(messageBox);
-            });
+            showMessageBox(`Failed to confirm order: ${err.message || 'Unknown error'}. Please try again.`);
         } finally {
             setIsConfirming(false); // Re-enable button regardless of success or failure
         }
-    }, [orderEntries, activeOrders, getNewlyAddedItems, setInitialActiveOrders, router]);
+    }, [orderEntries, activeOrders, getNewlyAddedItems, setInitialActiveOrders, router, showMessageBox]);
+
+
+    // Function to handle entry cancellation
+    const handleCancelButtonClick = useCallback(async (entryId: string) => {
+        setIsConfirming(true); // Disable button immediately to prevent multiple clicks
+        try {
+            await cancelOrderEntry(entryId);
+            showMessageBox("Item cancelled successfully!");
+            //Triggering a re-fetch to ensure the UI is fully synchronized after a cancellation
+            setRefreshActiveOrdersTrigger(prev => prev + 1);
+        } catch (error: any) {
+            console.error("Error cancelling item:", error);
+            showMessageBox(`Failed to cancel item: ${error.message || 'Unknown error'}.`);
+        } finally {
+            setIsConfirming(false); // Re-enable button regardless of success or failure
+        }
+    },[cancelOrderEntry, showMessageBox]);
 
 
     if (isLoading) {
@@ -325,110 +310,129 @@ const MyOrderPage: React.FC = () => {
         );
     }
 
-    return (
+     return (
         <div className="w-full min-h-screen flex flex-col items-center bg-[#fdd7a2] p-4">
             <BackButton onClick={() => router.push('/')}/>
 
             <h1 className="mt-16 text-2xl md:text-3xl font-bold text-gray-800 text-center mb-6">My Orders</h1>
 
-            <div className="bg-white rounded-lg p-5 w-[90%] max-w-[500px] shadow-md border border-gray-200 h-[68vh] flex flex-col justify-between">
-                <div className="border-b-2 border-dashed border-gray-300 pb-2.5 mb-1 text-xl text-gray-800 text-center font-semibold">
+            {/* Main white container for order details */}
+            <div className="bg-white rounded-lg p-5 w-[90%] max-w-[500px] shadow-md border border-gray-200 h-[68vh] flex flex-col">
+                <div className="border-b-2 border-dashed border-gray-300 pb-2.5 mb-4 text-xl text-gray-800 text-center font-semibold">
                     Order Details
                 </div>
 
-                {/* Scrollable Area for Order Items */}
-                <div className="order-items-scrollable flex flex-col gap-2.5 flex-1 overflow-y-scroll pr-2">
-                    {orderEntries.length === 0 && !isLoading ? (
-                        <p className="text-center py-5 text-gray-700 text-base">Your order is empty.</p>
-                    ) : (
-                        // Map directly over orderEntries to render each individual entry as a separate row
-                        orderEntries.map((entry, index) => (
-                            <div
-                                key={entry.id} // Use unique entry.id as key
-                                className="flex justify-between items-center bg-blue-50 rounded-lg p-4 shadow-md w-full border border-blue-200 mb-2"
-                            >
-                                <div className="flex flex-col">
-                                    {/* Display item name with entry indicator */}
-                                    <span className="text-gray-800 text-base font-medium">
-                                        {entry.name}
-                                    </span>
-                                    <span className="text-gray-500 text-xs">
-                                        Entry #{index + 1} • ${entry.price.toFixed(2)} each
-                                    </span>
-                                </div>
-                                
-                                <div className="flex items-center gap-3">
-                                    {/* Quantity Controls */}
-                                    <div className="flex items-center gap-2">
-                                        <button
-                                            onClick={() => decreaseEntryQuantity(entry.id)}
-                                            // Disable button only if quantity is 0 or confirmation is in progress
-                                            disabled={entry.quantity === 0 || isConfirming}
-                                            className={`
-                                                bg-red-400 text-white px-2 py-1 rounded-md text-sm font-bold shadow-sm transition-colors
-                                                ${entry.quantity === 0 || isConfirming ? 'opacity-50 cursor-not-allowed' : 'hover:bg-red-500 cursor-pointer'}
-                                            `}
-                                        >
-                                            -
-                                        </button>
-                                        <span className="text-gray-800 text-base font-bold min-w-[20px] text-center">
-                                            {entry.quantity}
-                                        </span>
-                                        <button
-                                            onClick={() => increaseEntryQuantity(entry.id)}
-                                            // Disable button only if confirmation is in progress
-                                            disabled={isConfirming}
-                                            className={`
-                                                bg-green-500 text-white px-2 py-1 rounded-md text-sm font-bold shadow-sm transition-colors
-                                                ${isConfirming ? 'opacity-50 cursor-not-allowed' : 'hover:bg-green-600 cursor-pointer'}
-                                            `}
-                                        >
-                                            +
-                                        </button>
+                {/* Scrollable Area for Order Items - Takes remaining space */}
+                <div className="flex-1 overflow-y-auto mb-4">
+                    <div className="space-y-3">
+                        {orderEntries.length === 0 && !isLoading ? (
+                            <p className="text-center py-8 text-gray-700 text-base">Your order is empty.</p>
+                        ) : (
+                            orderEntries.map((entry, index) => (
+                                <div
+                                    key={entry.id}
+                                    className="bg-blue-50 rounded-lg shadow-md w-full border border-blue-200 overflow-hidden"
+                                >
+                                    {/* Main content area with fixed minimum height */}
+                                    <div className="flex justify-between items-center px-2 py-2 min-h-[80px]">
+                                        <div className="flex flex-col justify-center flex-1">
+                                            <span className="text-gray-800 text-base font-medium leading-tight">
+                                                {entry.name}
+                                            </span>
+                                            <span className="text-gray-500 text-sm mt-1">
+                                                Entry #{index + 1} • ${entry.price} each
+                                            </span>
+                                        </div>
+                                        
+                                        <div className="flex items-center gap-3 ml-4">
+                                            {/* Quantity Controls */}
+                                            <div className="flex items-center gap-2">
+                                                <button
+                                                    onClick={() => decreaseEntryQuantity(entry.id)}
+                                                    disabled={entry.quantity === 0 || isConfirming}
+                                                    className={`
+                                                        bg-red-400 text-white px-3 py-2 rounded-md text-sm font-bold shadow-sm transition-colors min-w-[36px] h-[36px] flex items-center justify-center
+                                                        ${entry.quantity === 0 || isConfirming ? 'opacity-50 cursor-not-allowed' : 'hover:bg-red-500 cursor-pointer'}
+                                                    `}
+                                                >
+                                                    -
+                                                </button>
+                                                <span className="text-gray-800 text-base font-bold min-w-[30px] text-center">
+                                                    {entry.quantity}
+                                                </span>
+                                                <button
+                                                    onClick={() => increaseEntryQuantity(entry.id)}
+                                                    disabled={isConfirming}
+                                                    className={`
+                                                        bg-green-500 text-white px-3 py-2 rounded-md text-sm font-bold shadow-sm transition-colors min-w-[36px] h-[36px] flex items-center justify-center
+                                                        ${isConfirming ? 'opacity-50 cursor-not-allowed' : 'hover:bg-green-600 cursor-pointer'}
+                                                    `}
+                                                >
+                                                    +
+                                                </button>
+                                            </div>
+                                            
+                                            {/* Total price for this entry */}
+                                            <div className="text-right min-w-[70px]">
+                                                <span className="text-gray-700 font-medium text-base">
+                                                    ${(entry.price * entry.quantity).toFixed(2)}
+                                                </span>
+                                            </div>
+                                        </div>
                                     </div>
                                     
-                                    {/* Total price for this entry */}
-                                    <span className="text-gray-700 font-medium min-w-[60px] text-right">
-                                        ${(entry.price * entry.quantity).toFixed(2)}
-                                    </span>
+                                    {/* Cancel Button - Fixed height */}
+                                    <button
+                                        onClick={() => handleCancelButtonClick(entry.id)}
+                                        disabled={isConfirming}
+                                        className={`
+                                            w-full bg-gray-500 text-white py-2.5 text-sm font-bold transition-colors h-[40px] flex items-center justify-center
+                                            ${isConfirming ? 'opacity-50 cursor-not-allowed' : 'hover:bg-gray-600 cursor-pointer'}
+                                            rounded-b-lg
+                                        `}
+                                        style={{ borderTop: '1px solid #ccc' }}
+                                    >
+                                        Cancel
+                                    </button>
                                 </div>
-                            </div>
-                        ))
-                    )}
+                            ))
+                        )}
+                    </div>
                 </div>
 
-                {/* Total Bill Section */}
-                <div className="flex justify-between py-4 mt-2.5 border-t-2 border-dashed border-gray-300 font-bold">
-                    <span className="text-lg text-gray-800">Total Amount</span>
-                    <span className="text-lg text-[#F5BB49]">${totalBill.toFixed(2)}</span>
-                </div>
+                {/* Fixed Footer Section - Always stays at bottom */}
+                <div className="border-t-2 border-dashed border-gray-300 pt-4">
+                    {/* Total Bill Section */}
+                    <div className="flex justify-between py-2 font-bold">
+                        <span className="text-lg text-gray-800">Total Amount</span>
+                        <span className="text-lg text-[#F5BB49]">${totalBill.toFixed(2)}</span>
+                    </div>
 
-                {/* Confirm Order Button */}
-                <button
-                    onClick={handleConfirmOrder}
-                    // Button is disabled if:
-                    // 1. A confirmation is already in progress (`isConfirming`)
-                    // 2. There are no actual pending changes (`!hasPendingChanges()`)
-                    disabled={isConfirming || !hasPendingChanges()} 
-                    className={`py-3 px-8 bg-[#2ecc71] text-white font-bold rounded-lg shadow-md
-                    transition-all duration-200 ease-in-out mt-4
-                    ${isConfirming || !hasPendingChanges() ? 'opacity-50 cursor-not-allowed' : 'hover:bg-[#27ae60] hover:-translate-y-0.5 hover:shadow-lg active:bg-[#2ecc71] active:translate-y-0 active:shadow-md'}
-                    `}
-                >
-                    {isConfirming ? 'Confirming...' : 'Confirm Order'}
-                </button>
-                
-                {/* Add a Clear Order button here if you want to allow resetting the entire order */}
-                <button
-                    onClick={resetOrder}
-                    disabled={isConfirming}
-                    className={`py-3 px-8 bg-gray-500 text-white font-bold rounded-lg shadow-md
-                    transition-all duration-200 ease-in-out mt-2
-                    ${isConfirming ? 'opacity-50 cursor-not-allowed' : 'hover:bg-gray-600 hover:-translate-y-0.5 hover:shadow-lg active:bg-gray-500 active:translate-y-0 active:shadow-md'}
-                    `}
-                >
-                    Clear Order
-                </button>
+                    {/* Action Buttons */}
+                    <div className="space-y-2 mt-4">
+                        <button
+                            onClick={handleConfirmOrder}
+                            disabled={isConfirming || !hasPendingChanges()} 
+                            className={`w-full py-3 px-8 bg-[#2ecc71] text-white font-bold rounded-lg shadow-md
+                            transition-all duration-200 ease-in-out
+                            ${isConfirming || !hasPendingChanges() ? 'opacity-50 cursor-not-allowed' : 'hover:bg-[#27ae60] hover:-translate-y-0.5 hover:shadow-lg active:bg-[#2ecc71] active:translate-y-0 active:shadow-md'}
+                            `}
+                        >
+                            {isConfirming ? 'Confirming...' : 'Confirm Order'}
+                        </button>
+                        
+                        <button
+                            onClick={resetOrder}
+                            disabled={isConfirming}
+                            className={`w-full py-3 px-8 bg-gray-500 text-white font-bold rounded-lg shadow-md
+                            transition-all duration-200 ease-in-out
+                            ${isConfirming ? 'opacity-50 cursor-not-allowed' : 'hover:bg-gray-600 hover:-translate-y-0.5 hover:shadow-lg active:bg-gray-500 active:translate-y-0 active:shadow-md'}
+                            `}
+                        >
+                            Clear Order
+                        </button>
+                    </div>
+                </div>
             </div>
         </div>
     );

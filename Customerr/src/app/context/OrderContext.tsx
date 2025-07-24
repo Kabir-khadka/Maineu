@@ -1,6 +1,8 @@
 import React, { createContext, useState, useContext, useCallback } from "react";
 import { Order, OrderItem, OrderEntry } from '@/types/order';
 
+const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3000';
+
 interface OrderContextType {
     orderEntries: OrderEntry[];
     activeOrders: Order[];
@@ -19,6 +21,7 @@ interface OrderContextType {
     resetOrder: () => void;
     getTotalQuantityByName: (name: string) => number;
     hasPendingChanges: () => boolean;
+    cancelOrderEntry: (entryId: string) => Promise<void>; //New function to cancel an entry
 }
 
 const OrderContext = createContext<OrderContextType>({
@@ -36,7 +39,8 @@ const OrderContext = createContext<OrderContextType>({
     setActiveOrders: () => {},
     resetOrder: () => {},
     getTotalQuantityByName: () => 0,
-    hasPendingChanges: () => false
+    hasPendingChanges: () => false,
+    cancelOrderEntry: async () => {}
 });
 
 export const OrderProvider: React.FC<{children: React.ReactNode}> = ({ children }) => {
@@ -368,6 +372,76 @@ export const OrderProvider: React.FC<{children: React.ReactNode}> = ({ children 
         return false;
     }, [orderEntries, activeOrders]);
 
+    const cancelOrderEntry = useCallback(async (entryId: string) => {
+        console.log("OrderContext: cancelOrderEntry called for entryId:", entryId);
+
+        const entryToCancel = orderEntries.find(entry => entry.id === entryId);
+
+        if (!entryToCancel) {
+            console.warn("OrderContext: Attempted to cancel non-existent entry:", entryId);
+            return;
+        }
+
+        if (!entryToCancel.isConfirmed) {
+            // If it's an unconfirmed entry, just remove it from the local state
+            setOrderEntries(prevEntries => prevEntries.filter(entry => entry.id !== entryId));
+            console.log("OrderContext: Unconfirmed entry removed locally:", entryToCancel.name);
+            return;
+        }
+
+        // If it's a confirmed entry, send a PATCH request to the backend to cancel it
+        try {
+            const storedTableNumber = localStorage.getItem('tableNumber');
+            if (!storedTableNumber) {
+                console.error("OrderContext: Table number not found for cancelling confirmed order.");
+                throw new Error("Table number not found.");
+            }
+
+            // Find the actual Order._id associated with this item._id (entryId)
+            const orderToPatch = activeOrders.find(order => order.orderItems[0]?._id === entryId);
+
+            if (!orderToPatch) {
+                console.error("OrderContext: Could not find parent order for item to cancel:", entryId);
+                throw new Error("Parent order not found for cancellation.");
+            }
+
+            // The backend expects orderItems to be an array containing the single item
+            // with quantity 0, or an empty array to signal cancellation.
+            // Sending an empty array here will trigger the backend logic to set quantity to 0 and status to 'Cancelled'.
+            const patchData = {
+                orderItems: [], // Signal to backend to set quantity to 0 and status to 'Cancelled'
+                totalPrice: 0, // Set total price to 0
+                status: 'Cancelled' // Explicitly set status to Cancelled (backend will handle history)
+            };
+
+            // CRITICAL FIX: Use orderToPatch._id for the PATCH request URL
+            const response = await fetch(`${BACKEND_URL}/api/orders/${orderToPatch._id}`, { 
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(patchData)
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(`Failed to cancel order ${orderToPatch._id}: ${errorData.message || response.statusText}`);
+            }
+
+            const updatedOrder = await response.json();
+            console.log("OrderContext: Confirmed order cancelled via backend PATCH:", updatedOrder);
+
+            // After successful cancellation on backend, remove it from local state immediately.
+            // The AddEditContent component's useEffect that fetches active orders will also
+            // re-sync, but this provides immediate UI feedback.
+            setOrderEntries(prevEntries => prevEntries.filter(entry => entry.id !== entryId));
+            console.log("OrderContext: Confirmed entry removed locally after backend cancellation.");
+
+        } catch (error) {
+            console.error("OrderContext: Error cancelling confirmed order:", error);
+            // Re-throw to be caught by the calling component (AddEditContent)
+            throw error; 
+        }
+    }, [orderEntries, activeOrders]); // Added activeOrders to dependencies
+
     return (
         <OrderContext.Provider value={{
             orderEntries,
@@ -385,6 +459,7 @@ export const OrderProvider: React.FC<{children: React.ReactNode}> = ({ children 
             resetOrder,
             getTotalQuantityByName,
             hasPendingChanges,
+            cancelOrderEntry
         }}>
             {children}
         </OrderContext.Provider>

@@ -23,6 +23,7 @@ export default function AddEditContent () {
         setInitialActiveOrders,
         resetOrder,
         hasPendingChanges,
+        cancelOrderEntry,
     } = useOrder();
 
     const [isFoodMenuOpen, setIsFoodMenuOpen] = useState(false);
@@ -244,6 +245,22 @@ export default function AddEditContent () {
     }, [orderEntries, activeOrders, getNewlyAddedItems, setInitialActiveOrders, router, calculateTotalPrice, showMessageBox]);
     // --- END: MyOrderPage's handleConfirmOrder logic integrated ---
 
+    const handleCancelButtonClick = useCallback(async (entryId: string) => {
+        setIsConfirming(true); // Disable button to prevent multiple clicks
+        try {
+            await cancelOrderEntry(entryId);
+
+            showMessageBox("Item cancelled successfully.");
+            //Triggering a re-fetch to ensure the UI is fully synchronized after a cancellation
+            setRefreshActiveOrdersTrigger(prev => prev + 1);
+        } catch (error: any) {
+            console.error("Error cancelling item:", error);
+            showMessageBox(`Failed to cancel item: ${error.message || 'Unknown error'}`);
+        } finally {
+            setIsConfirming(false); // Re-enable button regardless of success or failure
+        }
+    }, [cancelOrderEntry, showMessageBox]);
+
     const totalBill = orderItems.reduce(
         (total, item) => total + item.quantity * item.price,
         0
@@ -336,6 +353,17 @@ export default function AddEditContent () {
                                                     <span className="text-gray-700 font-medium min-w-[60px] text-right">
                                                         ${(entry.price * entry.quantity).toFixed(2)}
                                                     </span>
+                                                    {/* Cancel button for confirmed items */}
+                                                    <button
+                                                        onClick={() => handleCancelButtonClick(entry.id)}
+                                                        disabled={isConfirming}
+                                                        className={`
+                                                            bg-gray-500 text-white px-2 py-1 rounded-md text-xs font-bold shadow-sm transition-colors ml-2
+                                                            ${isConfirming ? 'opacity-50 cursor-not-allowed' : 'hover:bg-gray-600 cursor-pointer'}
+                                                        `}
+                                                    >
+                                                        Cancel
+                                                    </button>
                                                 </div>
                                             </div>
                                         ))}
