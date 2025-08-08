@@ -291,194 +291,232 @@ export default function AddEditContent () {
     }
 
     const backgroundContent = (
-        <div className = "w-full min-h-screen flex flex-col items-center bg-[#fdd7a2] p-4">
-            <BackButton onClick={handleBackClick}/>
-            <h1 className="text-gray-800 text-xl md:text-2xl font-bold rounded-lg p-3 pt-16 text-center">
-                Add/Edit your Items.
-            </h1>
+    <div className="w-full min-h-screen flex flex-col items-center bg-[#fdd7a2] p-4">
+        <BackButton onClick={handleBackClick}/>
+        <h1 className="text-gray-800 text-xl md:text-2xl font-bold rounded-lg p-3 pt-16 text-center">
+            Add/Edit your Items.
+        </h1>
 
-            <div className="bg-white rounded-lg p-5 w-[90%] max-w-[500px] shadow-md border border-gray-200 h-[465px] flex flex-col justify-between">
-                <div className="border-b-2 border-dashed border-gray-300 pb-2.5 mb-1">
-                    <h2 className='text-xl text-gray-800 m-0 text-center'>Order Details</h2>
-                    <div className='text-sm text-gray-600 text-center'>{new Date().toLocaleDateString()}</div>
-                </div>
-                <div className="order-items-scrollable flex flex-col gap-2.5 flex-1 overflow-y-scroll pr-2">
-                    {orderEntries.length === 0 && !isLoading ? (
-                        <p className="text-center py-5 text-gray-700 text-base">Your order is empty.</p>
-                    ) : (
-                        <>
-                            {confirmedItems.length > 0 && (
-                                <div className="mb-4">
-                                    <h3 className="text-lg font-semibold text-gray-700 mb-2">Confirmed Items</h3>
-                                    <div className="space-y-2">
-                                        {confirmedItems.map((entry: OrderEntry, index) => (
-                                            <div
-                                                key={entry.id}
-                                                className="flex justify-between items-center bg-blue-50 rounded-lg p-4 shadow-md w-full border border-blue-200 mb-2"
-                                            >
-                                                <div className="flex flex-col">
-                                                    <span className="text-gray-800 text-base font-medium">
+        <div className="bg-white rounded-lg p-5 w-[90%] max-w-[500px] shadow-md border border-gray-200 h-[465px] flex flex-col justify-between">
+            <div className="border-b-2 border-dashed border-gray-300 pb-2.5 mb-1">
+                <h2 className='text-xl text-gray-800 m-0 text-center'>Order Details</h2>
+                <div className='text-sm text-gray-600 text-center'>{new Date().toLocaleDateString()}</div>
+            </div>
+            <div className="order-items-scrollable flex flex-col gap-2.5 flex-1 overflow-y-scroll pr-2">
+                {orderEntries.length === 0 && !isLoading ? (
+                    <p className="text-center py-5 text-gray-700 text-base">Your order is empty.</p>
+                ) : (
+                    <>
+                        {confirmedItems.length > 0 && (
+                            <div className="mb-4">
+                                <h3 className="text-lg font-semibold text-gray-700 mb-2">Confirmed Items</h3>
+                                <div className="space-y-2">
+                                    {confirmedItems.map((entry: OrderEntry, index) => (
+                                        // THIS IS THE MODIFIED SECTION
+                                        <div
+                                            key={entry.id}
+                                            className="bg-blue-50 rounded-lg shadow-md w-full border border-blue-200 overflow-hidden"
+                                        >
+                                            {/* Main content area with fixed minimum height */}
+                                            <div className="flex justify-between items-center px-2 py-2 min-h-[80px]">
+                                                <div className="flex flex-col justify-center flex-1">
+                                                    <span className="text-gray-800 text-base font-medium leading-tight">
                                                         {entry.name}
                                                     </span>
-                                                    <span className="text-gray-500 text-xs">
+                                                    <span className="text-gray-500 text-sm mt-1">
                                                         Entry #{index + 1} • ${entry.price.toFixed(2)} each
                                                     </span>
                                                 </div>
-                                                <div className="flex items-center gap-3">
+                                                
+                                                <div className="flex items-center gap-3 ml-4">
+                                                    {/* Quantity Controls */}
                                                     <div className="flex items-center gap-2">
                                                         <button
                                                             onClick={() => decreaseEntryQuantity(entry.id)}
                                                             disabled={entry.quantity === 0 || isConfirming}
                                                             className={`
-                                                                bg-red-400 text-white px-2 py-1 rounded-md text-sm font-bold shadow-sm transition-colors
+                                                                bg-red-400 text-white px-3 py-2 rounded-md text-sm font-bold shadow-sm transition-colors min-w-[36px] h-[36px] flex items-center justify-center
                                                                 ${entry.quantity === 0 || isConfirming ? 'opacity-50 cursor-not-allowed' : 'hover:bg-red-500 cursor-pointer'}
                                                             `}
                                                         >
                                                             -
                                                         </button>
-                                                        <span className="text-gray-800 text-base font-bold min-w-[20px] text-center">
+                                                        <span className="text-gray-800 text-base font-bold min-w-[30px] text-center">
                                                             {entry.quantity}
                                                         </span>
                                                         <button
                                                             onClick={() => increaseEntryQuantity(entry.id)}
                                                             disabled={isConfirming}
                                                             className={`
-                                                                bg-green-500 text-white px-2 py-1 rounded-md text-sm font-bold shadow-sm transition-colors
+                                                                bg-green-500 text-white px-3 py-2 rounded-md text-sm font-bold shadow-sm transition-colors min-w-[36px] h-[36px] flex items-center justify-center
                                                                 ${isConfirming ? 'opacity-50 cursor-not-allowed' : 'hover:bg-green-600 cursor-pointer'}
                                                             `}
                                                         >
                                                             +
                                                         </button>
                                                     </div>
-                                                    <span className="text-gray-700 font-medium min-w-[60px] text-right">
-                                                        ${(entry.price * entry.quantity).toFixed(2)}
-                                                    </span>
-                                                    {/* Cancel button for confirmed items */}
-                                                    <button
-                                                        onClick={() => handleCancelButtonClick(entry.id)}
-                                                        disabled={isConfirming}
-                                                        className={`
-                                                            bg-gray-500 text-white px-2 py-1 rounded-md text-xs font-bold shadow-sm transition-colors ml-2
-                                                            ${isConfirming ? 'opacity-50 cursor-not-allowed' : 'hover:bg-gray-600 cursor-pointer'}
-                                                        `}
-                                                    >
-                                                        Cancel
-                                                    </button>
+                                                    
+                                                    {/* Total price for this entry */}
+                                                    <div className="text-right min-w-[70px]">
+                                                        <span className="text-gray-700 font-medium text-base">
+                                                            ${(entry.price * entry.quantity).toFixed(2)}
+                                                        </span>
+                                                    </div>
                                                 </div>
                                             </div>
-                                        ))}
-                                    </div>
-                                </div>
-                            )}
-
-                            {unconfirmedItems.length > 0 && (
-                                <div className="mb-4">
-                                    <h3 className="text-lg font-semibold text-gray-700 mb-2">Pending Additions</h3>
-                                    <div className="space-y-2">
-                                        {unconfirmedItems.map((entry: OrderEntry, index) => (
-                                            <div
-                                                key={entry.id}
-                                                className="flex justify-between items-center bg-yellow-50 rounded-lg p-4 shadow-md w-full border border-yellow-200 mb-2"
+                                            
+                                            {/* Cancel Button - Fixed height */}
+                                            <button
+                                                onClick={() => handleCancelButtonClick(entry.id)}
+                                                disabled={isConfirming}
+                                                className={`
+                                                    w-full bg-gray-500 text-white py-2.5 text-sm font-bold transition-colors h-[40px] flex items-center justify-center
+                                                    ${isConfirming ? 'opacity-50 cursor-not-allowed' : 'hover:bg-gray-600 cursor-pointer'}
+                                                    rounded-b-lg
+                                                `}
+                                                style={{ borderTop: '1px solid #ccc' }}
                                             >
-                                                <div className="flex flex-col">
-                                                    <span className="text-gray-800 text-base font-medium">
+                                                Cancel
+                                            </button>
+                                        </div>
+                                        // END OF MODIFIED SECTION
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+
+                        {unconfirmedItems.length > 0 && (
+                            <div className="mb-4">
+                                <h3 className="text-lg font-semibold text-gray-700 mb-2">Pending Additions</h3>
+                                <div className="space-y-2">
+                                    {unconfirmedItems.map((entry: OrderEntry, index) => (
+                                        <div
+                                            key={entry.id}
+                                            className="bg-yellow-50 rounded-lg shadow-md w-full border border-blue-200 overflow-hidden"
+                                        >
+                                            {/* Main content area with fixed minimum height */}
+                                            <div className="flex justify-between items-center px-2 py-2 min-h-[80px]">
+                                                <div className="flex flex-col justify-center flex-1">
+                                                    <span className="text-gray-800 text-base font-medium leading-tight">
                                                         {entry.name}
                                                     </span>
-                                                    <span className="text-gray-500 text-xs">
+                                                    <span className="text-gray-500 text-sm mt-1">
                                                         Entry #{index + 1} • ${entry.price.toFixed(2)} each
                                                     </span>
                                                 </div>
-                                                <div className="flex items-center gap-3">
+                                                
+                                                <div className="flex items-center gap-3 ml-4">
+                                                    {/* Quantity Controls */}
                                                     <div className="flex items-center gap-2">
                                                         <button
                                                             onClick={() => decreaseEntryQuantity(entry.id)}
                                                             disabled={entry.quantity === 0 || isConfirming}
                                                             className={`
-                                                                bg-red-400 text-white px-2 py-1 rounded-md text-sm font-bold shadow-sm transition-colors
+                                                                bg-red-400 text-white px-3 py-2 rounded-md text-sm font-bold shadow-sm transition-colors min-w-[36px] h-[36px] flex items-center justify-center
                                                                 ${entry.quantity === 0 || isConfirming ? 'opacity-50 cursor-not-allowed' : 'hover:bg-red-500 cursor-pointer'}
                                                             `}
                                                         >
                                                             -
                                                         </button>
-                                                        <span className="text-gray-800 text-base font-bold min-w-[20px] text-center">
+                                                        <span className="text-gray-800 text-base font-bold min-w-[30px] text-center">
                                                             {entry.quantity}
                                                         </span>
                                                         <button
                                                             onClick={() => increaseEntryQuantity(entry.id)}
                                                             disabled={isConfirming}
                                                             className={`
-                                                                bg-green-500 text-white px-2 py-1 rounded-md text-sm font-bold shadow-sm transition-colors
+                                                                bg-green-500 text-white px-3 py-2 rounded-md text-sm font-bold shadow-sm transition-colors min-w-[36px] h-[36px] flex items-center justify-center
                                                                 ${isConfirming ? 'opacity-50 cursor-not-allowed' : 'hover:bg-green-600 cursor-pointer'}
                                                             `}
                                                         >
                                                             +
                                                         </button>
                                                     </div>
-                                                    <span className="text-gray-700 font-medium min-w-[60px] text-right">
-                                                        ${(entry.price * entry.quantity).toFixed(2)}
-                                                    </span>
+                                                    
+                                                    {/* Total price for this entry */}
+                                                    <div className="text-right min-w-[70px]">
+                                                        <span className="text-gray-700 font-medium text-base">
+                                                            ${(entry.price * entry.quantity).toFixed(2)}
+                                                        </span>
+                                                    </div>
                                                 </div>
                                             </div>
-                                        ))}
-                                    </div>
+                                            
+                                            {/* Cancel Button - Fixed height */}
+                                            <button
+                                                onClick={() => handleCancelButtonClick(entry.id)}
+                                                disabled={isConfirming}
+                                                className={`
+                                                    w-full bg-gray-500 text-white py-2.5 text-sm font-bold transition-colors h-[40px] flex items-center justify-center
+                                                    ${isConfirming ? 'opacity-50 cursor-not-allowed' : 'hover:bg-gray-600 cursor-pointer'}
+                                                    rounded-b-lg
+                                                `}
+                                                style={{ borderTop: '1px solid #ccc' }}
+                                            >
+                                                Cancel
+                                            </button>
+                                        </div>
+                                        // END OF MODIFIED SECTION
+                                    ))}
                                 </div>
-                            )}
-                        </>
-                    )}
-                </div>
-
-                <div className="flex justify-between py-4 mt-2.5 border-t-2 border-dashed border-gray-300 font-bold">
-                    <span className='text-lg text-gray-800'>Total Amount</span>
-                    <span className='text-lg text-[#F5BB49]'>${totalBill.toFixed(2)}</span>
-                </div>      
+                            </div>
+                        )}
+                    </>
+                )}
             </div>
 
-            <div className="flex flex-col items-center mt-4 w-full gap-4">
-                {error && (
-                    <p className="text-red-500 text-center font-bold mb-2">{error}</p>
-                )}
+            <div className="flex justify-between py-4 mt-2.5 border-t-2 border-dashed border-gray-300 font-bold">
+                <span className='text-lg text-gray-800'>Total Amount</span>
+                <span className='text-lg text-[#F5BB49]'>${totalBill.toFixed(2)}</span>
+            </div>      
+        </div>
 
-                <button
-                    onClick={handleConfirmOrder}
-                    disabled={isConfirming || !hasPendingChanges()}
-                    className={`py-3 px-8 text-white font-bold rounded-lg shadow-md w-[90%] max-w-[500px]
-                        ${isConfirming || !hasPendingChanges() ? 'bg-gray-400 cursor-not-allowed' : 'bg-blue-500 hover:bg-blue-600 active:bg-blue-700'}
-                        transition-all duration-200 ease-in-out hover:-translate-y-0.5 hover:shadow-lg
-                        active:translate-y-0 active:shadow-md`}
-                >
-                    {isConfirming ? 'Confirming...' : 'Confirm Order'}
-                </button>
+        <div className="flex flex-col items-center mt-4 w-full gap-4">
+            {error && (
+                <p className="text-red-500 text-center font-bold mb-2">{error}</p>
+            )}
 
-                <button
-                onClick={handleAddEditClick}
+            <button
+                onClick={handleConfirmOrder}
+                disabled={isConfirming || !hasPendingChanges()}
+                className={`py-3 px-8 text-white font-bold rounded-lg shadow-md w-[90%] max-w-[500px]
+                    ${isConfirming || !hasPendingChanges() ? 'bg-gray-400 cursor-not-allowed' : 'bg-blue-500 hover:bg-blue-600 active:bg-blue-700'}
+                    transition-all duration-200 ease-in-out hover:-translate-y-0.5 hover:shadow-lg
+                    active:translate-y-0 active:shadow-md`}
+            >
+                {isConfirming ? 'Confirming...' : 'Confirm Order'}
+            </button>
+
+            <button
+            onClick={handleAddEditClick}
+            className="py-3 px-8 bg-[#2ecc71] text-white font-bold rounded-lg shadow-md
+            transition-all duration-200 ease-in-out
+            hover:bg-[#2ecc71] hover:-translate-y-0.5 hover:shadow-lg
+            active:bg-[#2ecc71] active:translate-y-0 active:shadow-md"
+            >
+                Add/Edit
+            </button>
+
+            <button
+                onClick={handleMoveTowardsPayment}
                 className="py-3 px-8 bg-[#2ecc71] text-white font-bold rounded-lg shadow-md
                 transition-all duration-200 ease-in-out
                 hover:bg-[#2ecc71] hover:-translate-y-0.5 hover:shadow-lg
                 active:bg-[#2ecc71] active:translate-y-0 active:shadow-md"
-                >
-                    Add/Edit
-                </button>
-
-                <button
-                    onClick={handleMoveTowardsPayment}
-                    className="py-3 px-8 bg-[#2ecc71] text-white font-bold rounded-lg shadow-md
-                    transition-all duration-200 ease-in-out
-                    hover:bg-[#2ecc71] hover:-translate-y-0.5 hover:shadow-lg
-                    active:bg-[#2ecc71] active:translate-y-0 active:shadow-md"
-                >
-                    Move to Payment
-                </button>
-            </div>
+            >
+                Move to Payment
+            </button>
         </div>
-    );
+    </div>
+);
 
-    return (
-        <BottomSheetLayout
-            isOpen = {isFoodMenuOpen}
-            onClose={handleCloseFoodMenu}
-            bottomSheetContent={<FoodMenu />}
-        >
-            {backgroundContent}
-        </BottomSheetLayout>
-    )
+return (
+    <BottomSheetLayout
+        isOpen = {isFoodMenuOpen}
+        onClose={handleCloseFoodMenu}
+        bottomSheetContent={<FoodMenu />}
+    >
+        {backgroundContent}
+    </BottomSheetLayout>
+)
 }
