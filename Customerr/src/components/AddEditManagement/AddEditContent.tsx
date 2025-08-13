@@ -106,9 +106,22 @@ export default function AddEditContent () {
 
         socket.on('orderArchived', handleOrderArchived);
 
+        //Socket.IO listener for updated order status
+        const handleOrderStatusUpdated = (updatedOrder: Order) => {
+            //Only proceeding if the updated order belong to the current table
+            if (updatedOrder.tableNumber === storedTableNumber) {
+                console.log('Socket: Received orderStatusUpdated for ID:', updatedOrder._id);
+                // Re-fetch active orders to ensure the frontend state is in sync
+                setRefreshActiveOrdersTrigger(prev => prev + 1); // Trigger re-fetch
+            }
+        };
+
+        socket.on('orderStatusUpdated', handleOrderStatusUpdated);
+
         //Cleaning up socket listener on component unmount
         return () => {
             socket.off('orderArchived', handleOrderArchived);
+            socket.off('orderStatusUpdated', handleOrderStatusUpdated);
         };
     }, [router, setInitialActiveOrders, resetOrder, showMessageBox, refreshActiveOrdersTrigger]);
 
@@ -311,8 +324,16 @@ export default function AddEditContent () {
                             <div className="mb-4">
                                 <h3 className="text-lg font-semibold text-gray-700 mb-2">Confirmed Items</h3>
                                 <div className="space-y-2">
-                                    {confirmedItems.map((entry: OrderEntry, index) => (
+                                    {confirmedItems.map((entry: OrderEntry, index) => {
+                                        // Find the parent order for this specific entry.
+                                        const parentOrder = activeOrders.find(order =>
+                                            order.orderItems.some(item => item._id === entry.id)
+                                        );
+
+                                        // Determine if the parent order is delivered.
+                                        const isParentOrderDelivered = parentOrder?.status === 'Delivered';
                                         // THIS IS THE MODIFIED SECTION
+                                        return (
                                         <div
                                             key={entry.id}
                                             className="bg-blue-50 rounded-lg shadow-md w-full border border-blue-200 overflow-hidden"
@@ -333,10 +354,10 @@ export default function AddEditContent () {
                                                     <div className="flex items-center gap-2">
                                                         <button
                                                             onClick={() => decreaseEntryQuantity(entry.id)}
-                                                            disabled={entry.quantity === 0 || isConfirming}
+                                                            disabled={entry.quantity === 0 || isConfirming || isParentOrderDelivered}
                                                             className={`
                                                                 bg-red-400 text-white px-3 py-2 rounded-md text-sm font-bold shadow-sm transition-colors min-w-[36px] h-[36px] flex items-center justify-center
-                                                                ${entry.quantity === 0 || isConfirming ? 'opacity-50 cursor-not-allowed' : 'hover:bg-red-500 cursor-pointer'}
+                                                                ${entry.quantity === 0 || isConfirming || isParentOrderDelivered ? 'opacity-50 cursor-not-allowed' : 'hover:bg-red-500 cursor-pointer'}
                                                             `}
                                                         >
                                                             -
@@ -368,19 +389,20 @@ export default function AddEditContent () {
                                             {/* Cancel Button - Fixed height */}
                                             <button
                                                 onClick={() => handleCancelButtonClick(entry.id)}
-                                                disabled={isConfirming}
+                                                disabled={isConfirming || isParentOrderDelivered}
                                                 className={`
                                                     w-full bg-gray-500 text-white py-2.5 text-sm font-bold transition-colors h-[40px] flex items-center justify-center
-                                                    ${isConfirming ? 'opacity-50 cursor-not-allowed' : 'hover:bg-gray-600 cursor-pointer'}
+                                                    ${isConfirming || isParentOrderDelivered ? 'opacity-50 cursor-not-allowed' : 'hover:bg-gray-600 cursor-pointer'}
                                                     rounded-b-lg
                                                 `}
                                                 style={{ borderTop: '1px solid #ccc' }}
                                             >
-                                                Cancel
+                                                {isParentOrderDelivered ? 'Delivered' : 'Cancel'}
                                             </button>
                                         </div>
                                         // END OF MODIFIED SECTION
-                                    ))}
+                                        );
+                                    })}
                                 </div>
                             </div>
                         )}

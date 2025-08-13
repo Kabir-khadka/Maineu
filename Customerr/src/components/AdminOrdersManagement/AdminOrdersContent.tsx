@@ -424,6 +424,8 @@ export default function AdminOrdersContent() {
                 prev?.map((order) => (order._id === updatedOrder._id ? updatedOrder : order)) || null
             );
         }
+
+        socket.emit('orderStatusUpdated', updatedOrder); // Emit the updated order status
     };
 
     if (loading) return <div className="p-4 text-gray-500">Loading orders...</div>;
