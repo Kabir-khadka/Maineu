@@ -7,6 +7,7 @@ export interface OrderItem {
     name: string;
     quantity: number;
     price: number;
+    notes?: string; // Optional field for special instructions or notes
 }
 
 export interface Order {
