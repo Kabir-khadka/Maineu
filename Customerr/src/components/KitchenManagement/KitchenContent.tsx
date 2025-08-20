@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from "react";
 import io from 'socket.io-client';
 import { Order, OrderItem } from "@/types/order";
+import { MoveLeft } from "lucide-react";
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3000';
 
@@ -11,6 +12,38 @@ export default function KitchenContent() {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [successMessage, setSuccessMessage] = useState<string | null>(null);
+
+//Pagination state - updated for different screen sizes
+    const [page, setPage] = useState(0);
+    const getPageSize = () => {
+        if (typeof window !== 'undefined') {
+            const width = window.innerWidth;
+            if (width <= 768) return 2; // Mobile: 2 orders
+            if (width <= 1024) return 3; // iPad: 3 orders  
+            return 4; // Desktop/TV: 4 orders
+        }
+        return 4; // Default fallback
+    };
+    
+    const [pageSize, setPageSize] = useState(getPageSize());
+    const pageCount = Math.ceil(orders.length / pageSize);
+    const paginatedOrders = orders.slice(page * pageSize, (page + 1) * pageSize);
+
+    // Handle window resize
+    useEffect(() => {
+        const handleResize = () => {
+            const newPageSize = getPageSize();
+            setPageSize(newPageSize);
+            // Reset page if current page would be out of bounds
+            const newPageCount = Math.ceil(orders.length / newPageSize);
+            if (page >= newPageCount && newPageCount > 0) {
+                setPage(newPageCount - 1);
+            }
+        };
+
+        window.addEventListener('resize', handleResize);
+        return () => window.removeEventListener('resize', handleResize);
+    }, [orders.length, page]);
 
     // Helper function to display temporary success or error messages
     const showMessage = (message: string, isError = false) => {
@@ -112,8 +145,8 @@ export default function KitchenContent() {
     }
 
     return (
-        <div className="flex flex-col h-full bg-slate-800 p-4 sm:p-6 md:p-8">
-            <div className="p-2 sm:p-6 md:p-8 flex justify-between items-center mb-4">
+        <div className="flex flex-col h-full sm:p-4 md:p-2">
+            <div className="p-1 sm:p-6 md:p-2 flex justify-between items-center mb-[-150px] sm:mb-[-150px]">
                 <div className="flex items-center space-x-2 sm:space-x-3 md:space-x-4">
                     <div className="text-left">
                         <p className="text-xs sm:text-sm font-medium text-gray-50">Chef Name</p>
@@ -132,52 +165,63 @@ export default function KitchenContent() {
                 </div>
             )}
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 overflow-y-auto">
-                {orders.length > 0 ? (
-                    orders.map((order: Order) => (
-                        <div key={order._id} className="bg-white rounded-lg shadow-md p-4 flex flex-col justify-between" style={{ minWidth: '250px' }}>
-                            {/* Header Section */}
-                            <div className="bg-yellow-100 rounded-t-lg p-2 text-black flex justify-between items-center">
-                                <span className="font-bold text-lg">Table {order.tableNumber}</span>
-                                <span className="text-sm">{new Date(order.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-                            </div>
+             <div className="flex-1 flex items-center justify-center p-1 sm:p-4 min-h-0">
+                {paginatedOrders.length > 0 ? (
+                    <div className={`
+                        grid gap-1 sm:gap-4 w-full max-w-full
+                        grid-cols-2 md:grid-cols-3 
+                        lg:grid-cols-4 xl:grid-cols-4
+                    `}>
+                        {paginatedOrders.map((order: Order) => (
+                            <div 
+                                key={order._id} 
+                                className="bg-white rounded-lg shadow-md flex flex-col justify-between w-full min-h-[400px] sm:min-h-[500px] "
+                            >
+                                {/* Header Section */}
+                                <div className="bg-yellow-100 rounded-t-lg p-2 text-black flex justify-between items-center flex-shrink-0">
+                                    <span className="font-bold text-sm md:text-base lg:text-lg">Table {order.tableNumber}</span>
+                                    <span className="text-xs md:text-sm">{new Date(order.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                                </div>
 
-                            {/* Order Item Section */}
-                            <div className="p-4 flex-grow">
-                                {order.orderItems.length === 0 ? (
-                                    <div className="text-center text-gray-400 italic">No items found.</div>
-                                ) : (
-                                    order.orderItems.map((item: OrderItem, index) => {
-                                        return (
-                                            <div key={item._id || index} className="flex justify-between items-center">
-                                                <div>
-                                                    <p className="font-bold text-xl text-black">{item.name}</p>
-                                                    {item.notes && <p className="text-sm text-cyan-500">{item.notes}</p>}
+                                {/* Order Items Section - Scrollable if needed */}
+                                <div className="p-3 md:p-4 flex-grow overflow-y-auto min-h-0">
+                                    {order.orderItems.length === 0 ? (
+                                        <div className="text-center text-gray-400 italic text-sm">No items found.</div>
+                                    ) : (
+                                        <div className="space-y-2">
+                                            {order.orderItems.map((item: OrderItem, index) => (
+                                                <div key={item._id || index} className="flex justify-between items-center">
+                                                    <div className="flex-1 min-w-0">
+                                                        <p className="font-bold text-sm md:text-lg lg:text-xl text-black truncate">{item.name}</p>
+                                                        {item.notes && (
+                                                            <p className="text-xs md:text-sm text-cyan-500 break-words">{item.notes}</p>
+                                                        )}
+                                                    </div>
+                                                    <div className="flex items-center space-x-1 md:space-x-2 text-black flex-shrink-0 ml-2">
+                                                        <span className="text-sm md:text-xl font-bold">X</span>
+                                                        <span className="text-lg md:text-2xl lg:text-3xl font-bold">{item.quantity}</span>
+                                                    </div>
                                                 </div>
-                                                <div className="flex items-center space-x-2 text-black">
-                                                    <span className="text-xl font-bold">X</span>
-                                                    <span className="text-3xl font-bold">{item.quantity}</span>
-                                                </div>
-                                            </div>
-                                        );
-                                    })
-                                )}
-                            </div>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
 
-                            {/* Action Button Section */}
-                            <div className="p-2">
-                                <button
-                                    onClick={() => handleDone(order._id)}
-                                    className="w-full py-2 bg-green-500 text-white rounded-lg font-bold text-lg hover:bg-green-600 transition-colors"
-                                    disabled={order.status === 'Delivered'}
-                                >
-                                    DONE
-                                </button>
+                                {/* Action Button Section */}
+                                <div className="p-2 md:p-3 flex-shrink-0">
+                                    <button
+                                        onClick={() => handleDone(order._id)}
+                                        className="w-full py-2 bg-green-500 text-white rounded-lg font-bold text-sm md:text-lg hover:bg-green-600 transition-colors disabled:opacity-50"
+                                        disabled={order.status === 'Delivered'}
+                                    >
+                                        DONE
+                                    </button>
+                                </div>
                             </div>
-                        </div>
-                    ))
+                        ))}
+                    </div>
                 ) : (
-                    <div className="col-span-full text-center text-white text-lg">No new orders at the moment.</div>
+                    <div className="text-center text-white text-lg">No new orders at the moment.</div>
                 )}
             </div>
         </div>

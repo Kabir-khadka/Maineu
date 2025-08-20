@@ -24,7 +24,7 @@ export default function KitchenLayout ({ sidebar, children }: KicthenLayoutProps
             {/*Mobile Menu Button*/}
             <button
                 onClick={() => setIsSidebarOpen(true)}
-                className="md:hidden fixed top-4 right-4 z-50 p-2 rounded-md text-white bg-gray-800"
+                className="md:hidden fixed top-4 right-4 z-50 p-2 rounded-md text-white"
             >
                 <HiMenu size={24}/>
             </button>
