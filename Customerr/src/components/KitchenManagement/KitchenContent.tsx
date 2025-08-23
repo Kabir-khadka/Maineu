@@ -1,60 +1,39 @@
-'use client';
-
-import React, { useState, useEffect } from "react";
+"use client";
+import React, { useState, useEffect, Dispatch, SetStateAction } from "react";
 import io from 'socket.io-client';
 import { Order, OrderItem } from "@/types/order";
-import { MoveLeft } from "lucide-react";
 
-const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3000';
+const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL;
 
-export default function KitchenContent() {
+interface KitchenContentProps {
+    page: number;
+    pageSize: number;
+    setTotalOrders: Dispatch<SetStateAction<number>>;
+    setPage: React.Dispatch<React.SetStateAction<number>>;
+    pageCount: number;
+}
+
+export default function KitchenContent({ page, pageSize, setTotalOrders, setPage, pageCount }: KitchenContentProps) {
     const [orders, setOrders] = useState<Order[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
-//Pagination state - updated for different screen sizes
-    const [page, setPage] = useState(0);
-    const getPageSize = () => {
-        if (typeof window !== 'undefined') {
-            const width = window.innerWidth;
-            if (width <= 768) return 2; // Mobile: 2 orders
-            if (width <= 1024) return 3; // iPad: 3 orders  
-            return 4; // Desktop/TV: 4 orders
-        }
-        return 4; // Default fallback
-    };
-    
-    const [pageSize, setPageSize] = useState(getPageSize());
-    const pageCount = Math.ceil(orders.length / pageSize);
+    // Update total orders count whenever the orders list changes
+    useEffect(() => {
+        setTotalOrders(orders.length);
+    }, [orders, setTotalOrders]);
+
     const paginatedOrders = orders.slice(page * pageSize, (page + 1) * pageSize);
 
-    // Handle window resize
-    useEffect(() => {
-        const handleResize = () => {
-            const newPageSize = getPageSize();
-            setPageSize(newPageSize);
-            // Reset page if current page would be out of bounds
-            const newPageCount = Math.ceil(orders.length / newPageSize);
-            if (page >= newPageCount && newPageCount > 0) {
-                setPage(newPageCount - 1);
-            }
-        };
-
-        window.addEventListener('resize', handleResize);
-        return () => window.removeEventListener('resize', handleResize);
-    }, [orders.length, page]);
-
-    // Helper function to display temporary success or error messages
     const showMessage = (message: string, isError = false) => {
         if (isError) {
             setError(message);
-            setSuccessMessage(null); // Clear success if there's an error
+            setSuccessMessage(null);
         } else {
             setSuccessMessage(message);
-            setError(null); // Clear error if there's success
+            setError(null);
         }
-        // Messages disappear after 3 seconds
         setTimeout(() => {
             setSuccessMessage(null);
             setError(null);
@@ -69,7 +48,6 @@ export default function KitchenContent() {
                 throw new Error('Failed to fetch orders');
             }
             const data: Order[] = await response.json();
-            // Filter to show only 'In progress' or 'Delivered' orders
             const filteredOrders = data.filter(order =>
                 order.status === 'In progress' || order.status === 'Delivered'
             );
@@ -84,17 +62,13 @@ export default function KitchenContent() {
 
     useEffect(() => {
         fetchOrders();
-
         const socket = io(BACKEND_URL);
-
         socket.on('newOrder', (newOrder: Order) => {
             console.log("Socket.IO: New order received", newOrder);
             setOrders(prevOrders => [newOrder, ...prevOrders]);
             showMessage(`New Order for Table ${newOrder.tableNumber}!`, false);
         });
 
-        // This listener is for when an existing item's quantity is updated.
-        // FIX: Add this listener to handle item quantity changes and other general updates
         socket.on('orderUpdated', (updatedOrder: Order) => {
             console.log("Socket.IO: Received orderUpdated", updatedOrder);
             setOrders(prevOrders =>
@@ -113,11 +87,9 @@ export default function KitchenContent() {
             );
         });
 
-        // Cleanup on unmount
         return () => {
             socket.disconnect();
         };
-
     }, []);
 
     const handleDone = async (orderId: string) => {
@@ -131,8 +103,6 @@ export default function KitchenContent() {
             if (!response.ok) {
                 throw new Error('Failed to update order status');
             }
-
-            // The Socket.IO event 'orderStatusUpdated' will now handle the UI update.
             showMessage("Order marked as delivered!", false);
         } catch (err) {
             console.error("Error updating order status:", err);
@@ -158,32 +128,28 @@ export default function KitchenContent() {
                 </div>
             </div>
 
-            {/* Success and Error Message Display */}
             {(successMessage || error) && (
                 <div className={`p-3 rounded-lg text-white font-semibold text-center mb-4 ${error ? 'bg-red-500' : 'bg-green-500'}`}>
                     {successMessage || error}
                 </div>
             )}
 
-             <div className="flex-1 flex items-center justify-center p-1 sm:p-4 min-h-0">
+            <div className="flex-1 flex items-center justify-center p-1 sm:p-4 min-h-0">
                 {paginatedOrders.length > 0 ? (
                     <div className={`
                         grid gap-1 sm:gap-4 w-full max-w-full
-                        grid-cols-2 md:grid-cols-3 
+                        grid-cols-2 md:grid-cols-3
                         lg:grid-cols-4 xl:grid-cols-4
                     `}>
                         {paginatedOrders.map((order: Order) => (
-                            <div 
-                                key={order._id} 
+                            <div
+                                key={order._id}
                                 className="bg-white rounded-lg shadow-md flex flex-col justify-between w-full min-h-[400px] sm:min-h-[500px] "
                             >
-                                {/* Header Section */}
                                 <div className="bg-yellow-100 rounded-t-lg p-2 text-black flex justify-between items-center flex-shrink-0">
                                     <span className="font-bold text-sm md:text-base lg:text-lg">Table {order.tableNumber}</span>
                                     <span className="text-xs md:text-sm">{new Date(order.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                                 </div>
-
-                                {/* Order Items Section - Scrollable if needed */}
                                 <div className="p-3 md:p-4 flex-grow overflow-y-auto min-h-0">
                                     {order.orderItems.length === 0 ? (
                                         <div className="text-center text-gray-400 italic text-sm">No items found.</div>
@@ -206,8 +172,6 @@ export default function KitchenContent() {
                                         </div>
                                     )}
                                 </div>
-
-                                {/* Action Button Section */}
                                 <div className="p-2 md:p-3 flex-shrink-0">
                                     <button
                                         onClick={() => handleDone(order._id)}
@@ -223,6 +187,40 @@ export default function KitchenContent() {
                 ) : (
                     <div className="text-center text-white text-lg">No new orders at the moment.</div>
                 )}
+            </div>
+
+            {/* Pagination Controls moved here */}
+            <div className="w-full flex justify-center items-center py-4 bg-transparent mb-2 absolute left-0 bottom-0 sm:static sm:mb-0" style={{ zIndex: 10 }}>
+                <div className="flex items-center space-x-3 text-white text-lg sm:text-xl select-none">
+                    {/* Page numbers showing max 5 pages */}
+                    {Array.from({ length: Math.min(pageCount, 5) }).map((_, idx) => {
+                        let pageNumber;
+                        if (pageCount <= 5) {
+                            pageNumber = idx + 1;
+                        } else {
+                            if (page <= 2) {
+                                pageNumber = idx + 1;
+                            } else if (page >= pageCount - 3) {
+                                pageNumber = pageCount - 4 + idx;
+                            } else {
+                                pageNumber = page - 1 + idx + 1;
+                            }
+                        }
+
+                        return (
+                            <button
+                                key={pageNumber}
+                                onClick={() => setPage(pageNumber - 1)}
+                                className={`px-3 py-1 rounded focus:outline-none ${pageNumber === page + 1 ? "bg-gray-300 text-black font-bold cursor-default" : "hover:bg-gray-700 cursor-pointer"}`}
+                                disabled={pageNumber === page + 1}
+                                aria-current={pageNumber === page + 1 ? "page" : undefined}
+                            >
+                                {pageNumber}
+                            </button>
+                        );
+                    })}
+                    <span className="ml-1 text-white select-none text-lg">{">"}</span>
+                </div>
             </div>
         </div>
     );
