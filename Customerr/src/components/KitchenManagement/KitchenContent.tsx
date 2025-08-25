@@ -116,25 +116,23 @@ export default function KitchenContent({ page, pageSize, setTotalOrders, setPage
 
     return (
         <div className="flex flex-col h-full sm:p-4 md:p-2">
-            <div className="p-1 sm:p-6 md:p-2 flex justify-between items-center mb-[-150px] sm:mb-[-150px]">
-                <div className="flex items-center space-x-2 sm:space-x-3 md:space-x-4">
-                    <div className="text-left">
-                        <p className="text-xs sm:text-sm font-medium text-gray-50">Chef Name</p>
-                        <p className="text-[10px] sm:text-xs text-gray-50">Kitchen Staff</p>
-                    </div>
-                    <div className="w-8 h-8 sm:w-10 sm:h-10 md:w-12 md:h-12 bg-orange-400 rounded-full flex items-center justify-center text-white font-bold text-sm">
-                        CN
-                    </div>
-                </div>
-            </div>
+            
 
-            {(successMessage || error) && (
-                <div className={`p-3 rounded-lg text-white font-semibold text-center mb-4 ${error ? 'bg-red-500' : 'bg-green-500'}`}>
-                    {successMessage || error}
+             {/* Updated Floating Message  */}
+            {successMessage && (
+                <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 w-full max-w-xs sm:max-w-md md:max-w-lg bg-green-500 text-white px-4 py-3 rounded shadow-lg text-center" role="alert">
+                    <strong className='font-bold'>Success!</strong>
+                    <span className='block sm:inline ml-2'>{successMessage}</span>
+                </div>
+            )}
+            {error && (
+                <div className='fixed top-4 left-1/2 -translate-x-1/2 z-50 w-full max-w-xs sm:max-w-md md:max-w-lg bg-red-500 text-white px-4 py-3 rounded shadow-lg text-center' role="alert">
+                    <strong className='font-bold'>Error!</strong>
+                    <span className='block sm:inline ml-2'>{error}</span>
                 </div>
             )}
 
-            <div className="flex-1 flex items-center justify-center p-1 sm:p-4 min-h-0">
+            <div className="flex-1 flex items-center justify-center mb-[-5rem] p-1 sm:p-4 min-h-0">
                 {paginatedOrders.length > 0 ? (
                     <div className={`
                         grid gap-1 sm:gap-4 w-full max-w-full

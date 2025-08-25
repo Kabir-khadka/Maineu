@@ -3,11 +3,14 @@ import { useState, useEffect } from "react";
 import KitchenContent from "@/components/KitchenManagement/KitchenContent";
 import KitchenSidebar from "@/components/KitchenManagement/KitchenSidebar";
 import KitchenLayout from "@/components/Layout/KitchenLayout";
+import HistoryContent from "@/components/KitchenManagement/HistoryContent";
 
 export default function KitchenPage() {
     const [page, setPage] = useState(0);
     const [pageSize, setPageSize] = useState(4);
     const [totalOrders, setTotalOrders] = useState(0);
+    //New state for managing active view
+    const [activeView, setActiveView] = useState('Orders');
 
     // Calculate the total number of pages based on the total orders and page size
     const pageCount = Math.ceil(totalOrders / pageSize);
@@ -52,7 +55,10 @@ export default function KitchenPage() {
                     goToPreviousPage={goToPreviousPage}
                 />
             }
+            activeView={activeView}
+            setActiveView={setActiveView}
         >
+            {activeView === 'Orders' ? (
             <KitchenContent
                 page={page}
                 pageSize={pageSize}
@@ -60,6 +66,15 @@ export default function KitchenPage() {
                 pageCount={pageCount}
                 setTotalOrders={setTotalOrders}
             />
+            ) : (
+                <HistoryContent
+                    page={page}
+                    pageSize={pageSize}
+                    setPage={setPage}
+                    pageCount={pageCount}
+                    setTotalOrders={setTotalOrders}
+                />
+            )}
         </KitchenLayout>
     );
 }
