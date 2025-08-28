@@ -5,6 +5,7 @@ Maineu is a full-stack restaurant management system designed to streamline opera
 Maineu is divided into three interconnected panels, each tailored to specific user needs:
 
 📱 Customer Panel
+
 1.Online Ordering: Customers can browse the menu, add items to their cart, and place orders directly from their mobile devices.
 
 2.Real-time Updates: Track order status (e.g., In Progress, Delivered) in real time.
@@ -14,6 +15,7 @@ Maineu is divided into three interconnected panels, each tailored to specific us
 4.Table QR Codes: Easily access the digital menu by scanning a QR code on the table.
 
 💻 Admin Panel
+
 1.Centralized Control: A comprehensive dashboard to manage all restaurant operations.
 
 2.Order Fulfillment: View and manage all incoming orders, update their status, and ensure timely delivery.
@@ -25,6 +27,7 @@ Maineu is divided into three interconnected panels, each tailored to specific us
 5.Analytics: Access daily sales reports and other key business metrics.
 
 👨‍🍳 Kitchen Panel
+
 1.Real-time Order Feed: Automatically fetches and displays new order entries as they are placed.
 
 2.Streamlined Workflow: A clean, focused interface for kitchen staff to view and manage orders efficiently.
@@ -34,6 +37,7 @@ Maineu is divided into three interconnected panels, each tailored to specific us
 4.Order Details: View detailed information for each order, including items, quantities, and special notes.
 
 📸 Demo
+
 To truly see how Maineu works, check out these screenshots from the application's user interfaces.
 
 Customer Panel
@@ -42,6 +46,7 @@ Admin Panel
 
 
 🚀 Technologies
+
 Maineu is built using a modern and scalable tech stack:
 
 1.Frontend: React.js with Next.js for a high-performance, server-rendered application.
@@ -55,6 +60,7 @@ Maineu is built using a modern and scalable tech stack:
 5.Real-time Communication: Socket.io for instant updates between the customer, kitchen, and admin panels.
 
 📦 Getting Started
+
 Prerequisites
 1.Node.js (v18 or higher)
 
@@ -63,6 +69,7 @@ Prerequisites
 3.npm
 
 Installation
+
 Clone the repository:
 git clone https://github.com/Kabir-khadka/maineu.git
 cd maineu
