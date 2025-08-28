@@ -41,7 +41,7 @@ To run Maineu locally, follow these steps:
 
 Clone the repository:
 
-git clone https://github.com/your-username/maineu.git
+git clone https://github.com/Kabir-khadka/maineu.git
 cd maineu
 
 Install dependencies for both the backend and frontend:
