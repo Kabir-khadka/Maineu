@@ -19,6 +19,8 @@ export interface Order {
     statusHistory?: string[];
     createdAt: string;
     updatedAt: string;
+    kitchenDone?: boolean; // New property to track kitchen completion
+    isDone?: boolean; // Local state to track if the kitchen has marked it as done
 }
 
 export interface OrderEntry {

@@ -4,9 +4,8 @@ import { Order, OrderItem } from "@/types/order";
 import { io } from "socket.io-client";
 import KitchenReusableButton from "../ReusableComponents/KitchenReusableButton";
 
-const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL;
-
 interface HistoryContentProps {
+    orders: Order[] | undefined;
     page: number;
     pageSize: number;
     setTotalOrders: Dispatch<SetStateAction<number>>;
@@ -14,66 +13,18 @@ interface HistoryContentProps {
     pageCount: number;
 }
 
-export default function HistoryContent({ page, pageSize, setTotalOrders, setPage, pageCount }: HistoryContentProps) {
-    const [orders, setOrders] = useState<Order[]>([]);
-    const [loading, setLoading] = useState(true);
+export default function HistoryContent({ orders, page, pageSize, setTotalOrders, setPage, pageCount }: HistoryContentProps) {
     const [error, setError] = useState<string | null>(null);
 
-    //Update total orders count whenever orders change
-    useEffect(() => {
-        setTotalOrders(orders.length);
-    }, [orders, setTotalOrders]);
+    // Ensure orders is always an array
+    const safeOrders = orders || [];
 
-    const paginatedOrders = orders.slice(page * pageSize, (page + 1) * pageSize);
-
-    const fetchHistoryOrders = async () => {
-        setLoading(true);
-        try {
-            // Fetch only 'Delivered orders from the backend
-            const response = await fetch(`${BACKEND_URL}/api/orders`);
-            if (!response.ok) {
-               throw new Error('Failed to fetch history orders');
-            }
-            const data: Order[] = await response.json();
-            const deliveredOrders = data.filter(order => order.status === 'Delivered');
-            setOrders(deliveredOrders);
-        } catch (err) {
-            console.error("Error fetching history orders:", err);
-            setError("Failed to load history orders.");
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    useEffect(() => {
-        fetchHistoryOrders();
-        const socket = io(BACKEND_URL);
-
-        //Listening for order updates
-        socket.on('orderStatusUpdated', (updatedOrder: Order) => {
-            console.log("Socket.IO: Recieved order status updated in HistoryContent", updatedOrder);
-            //If the updated order is delivered, add it to the list
-            if (updatedOrder.status === 'Delivered') {
-                setOrders(prevOrders => {
-                    ////Avoid duplicates
-                    if(!prevOrders.some(order => order._id === updatedOrder._id)) {
-                        return [updatedOrder, ...prevOrders];
-                    }
-                    return prevOrders.map(order => order._id === updatedOrder._id
-                        ? updatedOrder : order
-                    );
-                });
-            }
-        });
-
-        return () => {
-            socket.disconnect();
-        };
-    }, []);
-
-    if (loading) {
-        return <div className="flex justify-center items-center h-full text-white">Loading history...</div>;
+    // Adding a guard clause here
+    if (!Array.isArray(safeOrders) || safeOrders.length === 0) {
+        return <div className="flex justify-center items-center h-full text-white">No delivered orders in history.</div>;
     }
+
+    const paginatedOrders = safeOrders.slice(page * pageSize, (page + 1) * pageSize);
 
     if (error) {
         return <div className="flex justify-center items-center h-full text-red-500">{error}</div>;
@@ -81,30 +32,31 @@ export default function HistoryContent({ page, pageSize, setTotalOrders, setPage
 
     return (
         <div className="flex flex-col h-full sm:p-4 md:p-2">
-            {/* The rest of the layout will be similar to KitchenContent, but without the Done button */}
             <div className="flex-1 flex items-center justify-center mb-[-5rem] p-1 sm:p-4 min-h-0">
                 {paginatedOrders.length > 0 ? (
                     <div className={`grid gap-1 sm:gap-4 w-full max-w-full grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-4`}>
-                        {paginatedOrders.map((order: Order) => (
-                            <div key={order._id} className="bg-white rounded-lg shadow-md flex flex-col justify-between w-full min-h-[400px] sm:min-h-[500px]">
+                        {paginatedOrders.map((order: Order, orderIndex: number) => (
+                            <div key={order._id || `order-${orderIndex}`} className="bg-white rounded-lg shadow-md flex flex-col justify-between w-full min-h-[400px] sm:min-h-[500px]">
                                 <div className="bg-green-300 rounded-t-lg p-2 text-black flex justify-between items-center flex-shrink-0">
+                                    {/* Now correctly displaying the table number from the full Order object */}
                                     <span className="font-bold text-sm md:text-base lg:text-lg">Table {order.tableNumber}</span>
+                                    {/* Now correctly displaying the creation time from the full Order object */}
                                     <span className="text-xs md:text-sm">{new Date(order.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                                 </div>
                                 <div className="p-3 md:p-4 flex-grow overflow-y-auto min-h-0">
-                                    {order.orderItems.length === 0 ? (
+                                    {!order.orderItems || order.orderItems.length === 0 ? (
                                         <div className="text-center text-gray-400 italic text-sm">No items found.</div>
                                     ) : (
                                         <div className="space-y-2">
                                             {order.orderItems.map((item, index) => (
-                                                <div key={item._id || index} className="flex justify-between items-center">
+                                                <div key={item._id || `item-${index}`} className="flex justify-between items-center">
                                                     <div className="flex-1 min-w-0">
-                                                        <p className="font-bold text-sm md:text-lg lg:text-xl text-black truncate">{item.name}</p>
+                                                        <p className="font-bold text-sm md:text-lg lg:text-xl text-black truncate">{item.name || 'Unknown Item'}</p>
                                                         {item.notes && <p className="text-xs md:text-sm text-gray-500 break-words">{item.notes}</p>}
                                                     </div>
                                                     <div className="flex items-center space-x-1 md:space-x-2 text-black flex-shrink-0 ml-2">
                                                         <span className="text-sm md:text-xl font-bold">X</span>
-                                                        <span className="text-lg md:text-2xl lg:text-3xl font-bold">{item.quantity}</span>
+                                                        <span className="text-lg md:text-2xl lg:text-3xl font-bold">{item.quantity || 0}</span>
                                                     </div>
                                                 </div>
                                             ))}
@@ -112,8 +64,10 @@ export default function HistoryContent({ page, pageSize, setTotalOrders, setPage
                                     )}
                                 </div>
                                 <div className="p-2 md:p-3 flex-shrink-0">
-                                    {/* No button needed here as orders are complete */}
-                                    <span className="w-full text-center text-gray-500 text-sm">Delivered at: {new Date(order.updatedAt).toLocaleTimeString()}</span>
+                                    <span className="w-full text-center text-gray-500 text-sm">
+                                        {/* Now correctly displaying the updated at time from the full Order object */}
+                                        Delivered at: {order.updatedAt ? new Date(order.updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Unknown time'}
+                                    </span>
                                 </div>
                             </div>
                         ))}

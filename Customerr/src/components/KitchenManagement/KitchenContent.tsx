@@ -3,9 +3,10 @@ import React, { useState, useEffect, Dispatch, SetStateAction } from "react";
 import io from 'socket.io-client';
 import { Order, OrderItem } from "@/types/order";
 
-const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL;
 
 interface KitchenContentProps {
+    orders: Order[];
+    handleDone: (orderId: string) => void
     page: number;
     pageSize: number;
     setTotalOrders: Dispatch<SetStateAction<number>>;
@@ -13,16 +14,9 @@ interface KitchenContentProps {
     pageCount: number;
 }
 
-export default function KitchenContent({ page, pageSize, setTotalOrders, setPage, pageCount }: KitchenContentProps) {
-    const [orders, setOrders] = useState<Order[]>([]);
-    const [loading, setLoading] = useState(true);
+export default function KitchenContent({ orders, handleDone, page, pageSize, setTotalOrders, setPage, pageCount }: KitchenContentProps) {
     const [error, setError] = useState<string | null>(null);
     const [successMessage, setSuccessMessage] = useState<string | null>(null);
-
-    // Update total orders count whenever the orders list changes
-    useEffect(() => {
-        setTotalOrders(orders.length);
-    }, [orders, setTotalOrders]);
 
     const paginatedOrders = orders.slice(page * pageSize, (page + 1) * pageSize);
 
@@ -39,80 +33,6 @@ export default function KitchenContent({ page, pageSize, setTotalOrders, setPage
             setError(null);
         }, 3000);
     };
-
-    const fetchOrders = async () => {
-        setLoading(true);
-        try {
-            const response = await fetch(`${BACKEND_URL}/api/orders`);
-            if (!response.ok) {
-                throw new Error('Failed to fetch orders');
-            }
-            const data: Order[] = await response.json();
-            const filteredOrders = data.filter(order =>
-                order.status === 'In progress' || order.status === 'Delivered'
-            );
-            setOrders(filteredOrders);
-        } catch (err) {
-            console.error("Error fetching orders:", err);
-            showMessage("Failed to load orders. Please try again.", true);
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    useEffect(() => {
-        fetchOrders();
-        const socket = io(BACKEND_URL);
-        socket.on('newOrder', (newOrder: Order) => {
-            console.log("Socket.IO: New order received", newOrder);
-            setOrders(prevOrders => [newOrder, ...prevOrders]);
-            showMessage(`New Order for Table ${newOrder.tableNumber}!`, false);
-        });
-
-        socket.on('orderUpdated', (updatedOrder: Order) => {
-            console.log("Socket.IO: Received orderUpdated", updatedOrder);
-            setOrders(prevOrders =>
-                prevOrders.map(order =>
-                    order._id === updatedOrder._id ? updatedOrder : order
-                )
-            );
-        });
-
-        socket.on('orderStatusUpdated', (updatedOrder: Order) => {
-            console.log("Socket.IO: Order status updated", updatedOrder);
-            setOrders(prevOrders =>
-                prevOrders.map(order =>
-                    order._id === updatedOrder._id ? updatedOrder : order
-                )
-            );
-        });
-
-        return () => {
-            socket.disconnect();
-        };
-    }, []);
-
-    const handleDone = async (orderId: string) => {
-        try {
-            const response = await fetch(`${BACKEND_URL}/api/orders/${orderId}/status`, {
-                method: 'PATCH',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ status: 'Delivered' }),
-            });
-
-            if (!response.ok) {
-                throw new Error('Failed to update order status');
-            }
-            showMessage("Order marked as delivered!", false);
-        } catch (err) {
-            console.error("Error updating order status:", err);
-            showMessage("Failed to update order status. Please try again.", true);
-        }
-    };
-
-    if (loading) {
-        return <div className="flex justify-center items-center h-full text-white">Loading orders...</div>;
-    }
 
     return (
         <div className="flex flex-col h-full sm:p-4 md:p-2">
@@ -173,8 +93,7 @@ export default function KitchenContent({ page, pageSize, setTotalOrders, setPage
                                 <div className="p-2 md:p-3 flex-shrink-0">
                                     <button
                                         onClick={() => handleDone(order._id)}
-                                        className="w-full py-2 bg-green-500 text-white rounded-lg font-bold text-sm md:text-lg hover:bg-green-600 transition-colors disabled:opacity-50"
-                                        disabled={order.status === 'Delivered'}
+                                        className="w-full py-2 bg-green-500 text-white rounded-lg font-bold text-sm md:text-lg hover:bg-green-600 transition-colors"    
                                     >
                                         DONE
                                     </button>
