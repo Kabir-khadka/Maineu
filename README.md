@@ -86,13 +86,14 @@ Configuration
 Create a .env file in the backend directory with your MongoDB connection string and other secrets:
 
 MONGO_URI=your_mongodb_connection_string
-PORT=5000
+
+CLIENT_URL= "http://localhost:3000"
 
 Running the Application
 Start the backend server:
 
 cd backend
-npm start
+node server.js
 
 Start the frontend development server:
 
