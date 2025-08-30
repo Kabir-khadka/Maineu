@@ -5,7 +5,7 @@ Maineu is a full-stack restaurant management system designed to streamline opera
 
 Watch short overview Youtube video of what my Web App does.
 
-https://youtu.be/8Z5nbhOmck8
+https://youtu.be/VF5A66kBNo8
 
 ✨ Features
 
