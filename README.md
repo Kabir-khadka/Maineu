@@ -1,7 +1,14 @@
 Maineu: A Comprehensive Restaurant Management System
 Maineu is a full-stack restaurant management system designed to streamline operations for restaurants of all sizes. It provides a seamless experience for customers to place orders and powerful tools for administrators and kitchen staff to manage the entire workflow, from order placement to delivery and payment.
 
+<img width="1901" height="852" alt="Screenshot 2025-08-30 092656" src="https://github.com/user-attachments/assets/f64859fa-1050-4bf0-a16f-95b46cda187b" />
+
+Watch short overview Youtube video of what my Web App does.
+
+https://youtu.be/8Z5nbhOmck8
+
 ✨ Features
+
 Maineu is divided into three interconnected panels, each tailored to specific user needs:
 
 📱 Customer Panel
