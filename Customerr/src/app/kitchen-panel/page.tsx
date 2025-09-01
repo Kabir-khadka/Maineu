@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import KitchenContent from "@/components/KitchenManagement/KitchenContent";
 import KitchenSidebar from "@/components/KitchenManagement/KitchenSidebar";
 import KitchenLayout from "@/components/Layout/KitchenLayout";
@@ -22,6 +22,8 @@ export default function KitchenPage() {
     const [historyIndex, setHistoryIndex] = useState(-1);
 
     const inProgressOrders = allOrders.filter(order => !order.kitchenDone);
+    
+    const isInitialLoad = useRef(true);
 
     const fetchOrders = async () => {
         setLoading(true);
@@ -47,7 +49,14 @@ export default function KitchenPage() {
 
     const saveToHistory = (newAllOrders: Order[], newDoneOrders: Order[]) => {
         setHistory(prevHistory => {
-            const newHistory = [...prevHistory.slice(0, historyIndex + 1), [...newAllOrders, ...newDoneOrders]];
+            const newCombinedState = [...newAllOrders, ...newDoneOrders].sort((a, b) => a._id.localeCompare(b._id));
+            const lastState = prevHistory[prevHistory.length - 1];
+            
+            if (lastState && JSON.stringify(newCombinedState) === JSON.stringify(lastState.sort((a, b) => a._id.localeCompare(b._id)))) {
+                return prevHistory;
+            }
+            
+            const newHistory = [...prevHistory, newCombinedState];
             if (newHistory.length > 7) {
                 return newHistory.slice(newHistory.length - 7);
             }
@@ -60,11 +69,9 @@ export default function KitchenPage() {
         const completedOrder = allOrders.find(order => order._id === orderId);
 
         if (completedOrder) {
-            // Optimistic UI update: Remove from inProgress and add to done
             const newAllOrders = allOrders.filter(order => order._id !== orderId);
             const newDoneOrders = [...doneOrders, { ...completedOrder, kitchenDone: true }];
             
-            // Update state in one single transaction
             setAllOrders(newAllOrders);
             setDoneOrders(newDoneOrders);
             saveToHistory(newAllOrders, newDoneOrders);
@@ -90,7 +97,6 @@ export default function KitchenPage() {
                 console.log("Order status updated successfully in the database.");
             } catch (error) {
                 console.error("Error processing order as done:", error);
-                // Revert state if the API call fails
                 setAllOrders(prev => [...newAllOrders, completedOrder]);
                 setDoneOrders(prev => prev.filter(order => order._id !== orderId));
             }
@@ -101,6 +107,7 @@ export default function KitchenPage() {
         if (historyIndex > 0) {
             const newIndex = historyIndex - 1;
             const previousState = history[newIndex];
+            
             if (previousState) {
                 const inProgress = previousState.filter(order => !order.kitchenDone);
                 const done = previousState.filter(order => order.kitchenDone);
@@ -113,16 +120,26 @@ export default function KitchenPage() {
     };
 
     useEffect(() => {
-        fetchOrders();
+        if (isInitialLoad.current) {
+            fetchOrders();
+            isInitialLoad.current = false;
+        }
+
         const socket = io(BACKEND_URL);
         
         socket.on('newOrder', (newOrder) => {
-            setAllOrders(prevOrders => [{ ...newOrder, kitchenDone: false }, ...prevOrders]);
-            // No need to clear history, as we will handle it with the saveToHistory call
+            setHistory([]);
+            setHistoryIndex(-1);
+
+            setAllOrders(prevOrders => {
+                const newAll = [{ ...newOrder, kitchenDone: false }, ...prevOrders];
+                saveToHistory(newAll, doneOrders);
+                return newAll;
+            });
         });
         
         socket.on('kitchenOrderUpdated', (updatedOrder) => {
-            // Check if the order is already in the doneOrders list before adding it
+            setAllOrders(prevAll => prevAll.filter(order => order._id !== updatedOrder._id));
             setDoneOrders(prevDone => {
                 const isAlreadyDone = prevDone.some(order => order._id === updatedOrder._id);
                 if (!isAlreadyDone) {
@@ -130,8 +147,6 @@ export default function KitchenPage() {
                 }
                 return prevDone;
             });
-            // Also, ensure it's not in the inProgress list
-            setAllOrders(prevAll => prevAll.filter(order => order._id !== updatedOrder._id));
         });
 
         socket.on('orderUpdated', (updatedOrder) => {
@@ -149,9 +164,7 @@ export default function KitchenPage() {
         return () => {
             socket.disconnect();
         };
-    }, []);
-
-    // ... (The rest of the component remains the same)
+    }, [doneOrders]);
 
     const pageCount = Math.ceil((activeView === 'Orders' ? inProgressOrders.length : doneOrders.length) / pageSize);
 
