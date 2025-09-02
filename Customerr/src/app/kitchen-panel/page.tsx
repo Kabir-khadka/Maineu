@@ -200,6 +200,8 @@ export default function KitchenPage() {
                     goToPreviousPage={goToPreviousPage}
                     handleUndo={handleUndo}
                     canUndo={doneOrderIds.length > 0}
+                    openOrderCount={inProgressOrders.length}
+                    doneOrderCount={doneOrders.length}
                 />
             }
             activeView={activeView}
