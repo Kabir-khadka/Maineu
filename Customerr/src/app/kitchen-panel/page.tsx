@@ -18,8 +18,9 @@ export default function KitchenPage() {
     const [doneOrders, setDoneOrders] = useState<Order[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
-    const [history, setHistory] = useState<Order[][]>([]);
-    const [historyIndex, setHistoryIndex] = useState(-1);
+    
+    // Just track the order IDs that were marked as done (for undo)
+    const [doneOrderIds, setDoneOrderIds] = useState<string[]>([]);
 
     const inProgressOrders = allOrders.filter(order => !order.kitchenDone);
     
@@ -38,7 +39,9 @@ export default function KitchenPage() {
             
             setAllOrders(inProgress);
             setDoneOrders(done);
-            saveToHistory(inProgress, done);
+            // Clear the done tracking when fetching fresh data
+            setDoneOrderIds([]);
+            
         } catch (err) {
             console.error("Error fetching orders:", err);
             setError("Failed to load orders. Please try again.");
@@ -47,34 +50,16 @@ export default function KitchenPage() {
         }
     };
 
-    const saveToHistory = (newAllOrders: Order[], newDoneOrders: Order[]) => {
-        setHistory(prevHistory => {
-            const newCombinedState = [...newAllOrders, ...newDoneOrders].sort((a, b) => a._id.localeCompare(b._id));
-            const lastState = prevHistory[prevHistory.length - 1];
-            
-            if (lastState && JSON.stringify(newCombinedState) === JSON.stringify(lastState.sort((a, b) => a._id.localeCompare(b._id)))) {
-                return prevHistory;
-            }
-            
-            const newHistory = [...prevHistory, newCombinedState];
-            if (newHistory.length > 7) {
-                return newHistory.slice(newHistory.length - 7);
-            }
-            return newHistory;
-        });
-        setHistoryIndex(prevIndex => prevIndex + 1);
-    };
-
     const handleKitchenDone = async (orderId: string) => {
         const completedOrder = allOrders.find(order => order._id === orderId);
 
         if (completedOrder) {
-            const newAllOrders = allOrders.filter(order => order._id !== orderId);
-            const newDoneOrders = [...doneOrders, { ...completedOrder, kitchenDone: true }];
+            // Track this order ID for undo
+            setDoneOrderIds(prev => [...prev, orderId]);
             
-            setAllOrders(newAllOrders);
-            setDoneOrders(newDoneOrders);
-            saveToHistory(newAllOrders, newDoneOrders);
+            // Move order from allOrders to doneOrders
+            setAllOrders(prev => prev.filter(order => order._id !== orderId));
+            setDoneOrders(prev => [...prev, { ...completedOrder, kitchenDone: true }]);
 
             try {
                 await fetch(`${BACKEND_URL}/api/analytics/log-completed-items`, {
@@ -97,24 +82,29 @@ export default function KitchenPage() {
                 console.log("Order status updated successfully in the database.");
             } catch (error) {
                 console.error("Error processing order as done:", error);
-                setAllOrders(prev => [...newAllOrders, completedOrder]);
+                // Rollback on error
+                setAllOrders(prev => [...prev, completedOrder]);
                 setDoneOrders(prev => prev.filter(order => order._id !== orderId));
+                setDoneOrderIds(prev => prev.filter(id => id !== orderId));
             }
         }
     };
 
     const handleUndo = () => {
-        if (historyIndex > 0) {
-            const newIndex = historyIndex - 1;
-            const previousState = history[newIndex];
+        if (doneOrderIds.length > 0) {
+            // Get the last order ID that was marked as done
+            const lastDoneOrderId = doneOrderIds[doneOrderIds.length - 1];
             
-            if (previousState) {
-                const inProgress = previousState.filter(order => !order.kitchenDone);
-                const done = previousState.filter(order => order.kitchenDone);
+            // Find that order in doneOrders
+            const orderToUndo = doneOrders.find(order => order._id === lastDoneOrderId);
+            
+            if (orderToUndo) {
+                // Move it back to allOrders and remove from doneOrders
+                setDoneOrders(prev => prev.filter(order => order._id !== lastDoneOrderId));
+                setAllOrders(prev => [{ ...orderToUndo, kitchenDone: false }, ...prev]);
                 
-                setAllOrders(inProgress);
-                setDoneOrders(done);
-                setHistoryIndex(newIndex);
+                // Remove this ID from our tracking
+                setDoneOrderIds(prev => prev.slice(0, -1));
             }
         }
     };
@@ -128,14 +118,10 @@ export default function KitchenPage() {
         const socket = io(BACKEND_URL);
         
         socket.on('newOrder', (newOrder) => {
-            setHistory([]);
-            setHistoryIndex(-1);
+            // Clear undo tracking when new orders arrive
+            setDoneOrderIds([]);
 
-            setAllOrders(prevOrders => {
-                const newAll = [{ ...newOrder, kitchenDone: false }, ...prevOrders];
-                saveToHistory(newAll, doneOrders);
-                return newAll;
-            });
+            setAllOrders(prevOrders => [{ ...newOrder, kitchenDone: false }, ...prevOrders]);
         });
         
         socket.on('kitchenOrderUpdated', (updatedOrder) => {
@@ -164,7 +150,7 @@ export default function KitchenPage() {
         return () => {
             socket.disconnect();
         };
-    }, [doneOrders]);
+    }, []);
 
     const pageCount = Math.ceil((activeView === 'Orders' ? inProgressOrders.length : doneOrders.length) / pageSize);
 
@@ -213,7 +199,7 @@ export default function KitchenPage() {
                     setPage={setPage}
                     goToPreviousPage={goToPreviousPage}
                     handleUndo={handleUndo}
-                    canUndo={historyIndex > 0}
+                    canUndo={doneOrderIds.length > 0}
                 />
             }
             activeView={activeView}
