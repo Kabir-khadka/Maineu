@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const Order = require('../models/Order'); // Import the Order model
 const ArchivedOrder = require('../models/ArchivedOrder'); // Import the ArchivedOrder model
+const DailyAnalytics = require('../models/DailyAnalytics'); 
 
 //Exports a function that takes the 'io' instance
 module.exports = (io) => {
@@ -169,7 +170,34 @@ router.get('/orders', async (req, res) => {
     }
 });
 
+//PATCH- Updating to kitchDone status.
+router.patch('/orders/:id/kitchen-done', async (req, res) => {
+    const { kitchenDone } = req.body;
 
+    // Validate the incoming value
+    if (typeof kitchenDone !== 'boolean') {
+        return res.status(400).json({ error: 'Invalid value for kitchenDone' });
+    }
+
+    try {
+        const order = await Order.findById(req.params.id);
+        if (!order) {
+            return res.status(404).json({ error: 'Order not found' });
+        }
+        
+        // Update the kitchenDone field
+        order.kitchenDone = kitchenDone;
+        await order.save();
+
+        // Emit a new Socket.IO event specifically for kitchen completion
+        io.emit('kitchenOrderUpdated', order);
+        
+        res.json(order);
+    } catch (error) {
+        console.error('Error updating kitchen-done status:', error);
+        res.status(500).json({ error: 'Failed to update kitchen-done status' });
+    }
+});
 
 //PATCH - Update an order status (e.g., from admin panel)
 router.patch('/orders/:id/status', async (req, res) => {
@@ -238,6 +266,62 @@ router.patch('/orders/:id/revert-status', async (req, res) => {
     } catch (err) {
         console.error('Error reverting order status:', err);
         res.status(500).json({ error: 'Failed to revert status' });
+    }
+});
+
+//Route to fetch completed items from DailyAnalytics collection model
+router.get('/analytics/daily', async(req, res) => {
+    try {
+        const today = new Date();
+        today.setHours(0,0,0,0);
+
+        const dailyAnalytics = await DailyAnalytics.findOne({ date: today });
+
+        //If a document for today exits, return the completed orders
+        //Otherwise, returns an empty array
+        const completedOrders = dailyAnalytics ? dailyAnalytics.foodItems : [];
+        res.status(200).json({ completedOrders });
+    } catch (error) {
+        console.error('Error fetching daily analytics:', error);
+        res.status(500).json({ error: 'Failed to fetch daily analytics' });
+    }
+});
+
+//This endpoint will log completed food items for analytics
+router.post('/analytics/log-completed-items', async (req, res) => {
+    try {
+        const completedItems = req.body.items;
+
+        const today = new Date();
+        // Set the time to the beginning of the day to ensure a consistent query
+        today.setHours(0, 0, 0, 0);
+
+        // Find or create a document for today's analytics
+        // Use an upsert operation for atomic find and update
+        let dailyAnalytics = await DailyAnalytics.findOneAndUpdate(
+            { date: today }, // Query for the document with the date at midnight
+            { $set: { date: today } }, // Set the date in case a new document is created
+            { new: true, upsert: true } // Return the new document and create it if it doesn't exist
+        );
+
+        // Updating the quantity for each completed item
+        completedItems.forEach(item => {
+            const existingItem = dailyAnalytics.foodItems.find(
+                (el) => el.name === item.name
+            );
+            if (existingItem) {
+                existingItem.quantity += item.quantity;
+            } else {
+                dailyAnalytics.foodItems.push(item);
+            }
+        });
+
+        await dailyAnalytics.save(); // Save the updated document
+
+        res.status(200).json({ message: 'Analytics data logged successfully' });
+    } catch (error) {
+        console.error('Error logging analytics data:', error);
+        res.status(500).json({ error: 'Failed to log analytics data' });
     }
 });
 

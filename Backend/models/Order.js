@@ -19,6 +19,10 @@ const orderSchema = new mongoose.Schema({
 statusHistory: {
     type: [String],
     default: []
+},
+kitchenDone: {
+    type: Boolean,
+    default: false
 }
 },{ timestamps: true });
 
